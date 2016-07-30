@@ -38,8 +38,8 @@ var (
 	proxy_pass http://upstream-name;
 	`, false},
 		"redirect /something to /": {"/something", "/", "~* /something", `
-	rewrite /something / break;
 	rewrite /something/(.*) /$1 break;
+	rewrite /something / break;
 	proxy_pass http://upstream-name;
 	`, false},
 		"redirect /something-complex to /not-root": {"/something-complex", "/not-root", "~* /something-complex", `
@@ -53,8 +53,8 @@ var (
 	subs_filter '<HEAD(.*)>' '<HEAD$1><base href="$scheme://$server_name/jenkins/">' r;
 	`, true},
 		"redirect /something to / and rewrite": {"/something", "/", "~* /something", `
-	rewrite /something / break;
 	rewrite /something/(.*) /$1 break;
+	rewrite /something / break;
 	proxy_pass http://upstream-name;
 	subs_filter '<head(.*)>' '<head$1><base href="$scheme://$server_name/">' r;
 	subs_filter '<HEAD(.*)>' '<HEAD$1><base href="$scheme://$server_name/">' r;
@@ -72,7 +72,7 @@ func TestBuildLocation(t *testing.T) {
 	for k, tc := range tmplFuncTestcases {
 		loc := &Location{
 			Path:     tc.Path,
-			Redirect: rewrite.Redirect{tc.Target, tc.AddBaseURL},
+			Redirect: rewrite.Redirect{Target: tc.Target, AddBaseURL: tc.AddBaseURL},
 		}
 
 		newLoc := buildLocation(loc)
@@ -86,7 +86,7 @@ func TestBuildProxyPass(t *testing.T) {
 	for k, tc := range tmplFuncTestcases {
 		loc := &Location{
 			Path:     tc.Path,
-			Redirect: rewrite.Redirect{tc.Target, tc.AddBaseURL},
+			Redirect: rewrite.Redirect{Target: tc.Target, AddBaseURL: tc.AddBaseURL},
 			Upstream: Upstream{Name: "upstream-name"},
 		}
 

@@ -10,9 +10,9 @@ app.controller('SQCntl', ['DataService', '$interval', '$location', SQCntl]);
 function SQCntl(dataService, $interval, $location) {
   var self = this;
   self.prs = {};
-  self.users = {};
-  self.builds = {};
   self.health = {};
+  self.metadata = {};
+  self.testResults = {};
   self.lastMergeTime = Date();
   self.prQuerySearch = prQuerySearch;
   self.historyQuerySearch = historyQuerySearch;
@@ -56,6 +56,9 @@ function SQCntl(dataService, $interval, $location) {
       }
   }
 
+  // Populate data about the submit-queue instance.
+  refreshMetadata();
+
   loadTab(self.selected);
 
   // Defer loading of data for a tab until it's actually needed.
@@ -68,7 +71,6 @@ function SQCntl(dataService, $interval, $location) {
     reloadFunctions[refreshSQStats] = 30;
     reloadFunctions[refreshHistoryPRs] = 1;
     reloadFunctions[refreshE2EHealth] = 10;
-    reloadFunctions[refreshUsers] = 15;
     reloadFunctions[refreshBotStats] = 10;
 
     // tabFunctionReloads is a map of which tabs need which functions to refresh
@@ -77,7 +79,7 @@ function SQCntl(dataService, $interval, $location) {
       1: [refreshGithubE2E, refreshSQStats],
       2: [refreshHistoryPRs],
       3: [refreshE2EHealth, refreshSQStats],
-      4: [refreshSQStats, refreshUsers, refreshBotStats],
+      4: [refreshSQStats, refreshBotStats],
     }
     if (self.tabLoaded[self.selected]) {
       return;
@@ -103,8 +105,8 @@ function SQCntl(dataService, $interval, $location) {
 
   // This data is shown in a top banner (when the Queue is blocked),
   // so it's always loaded.
-  refreshGoogleInternalCI();
-  $interval(refreshGoogleInternalCI, 60000);  // Refresh every minute
+  refreshContinuousTests();
+  $interval(refreshContinuousTests, 60000);  // Refresh every minute
 
   // Request Avatars that are only as large necessary (CSS limits them to 40px)
   function fixPRAvatars(prs) {
@@ -123,6 +125,15 @@ function SQCntl(dataService, $interval, $location) {
       self.prSearchTerms = getPRSearchTerms();
     }, function errorCallback(response) {
       console.log("Error: Getting SubmitQueue Status");
+    });
+  }
+
+  function refreshMetadata() {
+    dataService.getData('metadata').then(function successCallback(response) {
+      var metadata = response.data;
+      self.metadata = metadata;
+    }, function errorCallback(response) {
+      console.log("Error: Getting MetaData for SubmitQueue");
     });
   }
 
@@ -160,12 +171,6 @@ function SQCntl(dataService, $interval, $location) {
     });
   }
 
-  function refreshUsers() {
-    dataService.getData('users').then(function successCallback(response) {
-      self.users = response.data;
-    });
-  }
-
   function refreshE2EHealth() {
     dataService.getData("health").then(function successCallback(response) {
       self.health = response.data;
@@ -173,53 +178,102 @@ function SQCntl(dataService, $interval, $location) {
         var percentStable = self.health.NumStable * 100.0 / self.health.TotalLoops;
         self.OverallHealth = Math.round(percentStable) + "%";
       }
-      updateBuildStability(self.builds, self.health);
+      updateBuildStability(self.testResults.blockingBuilds, self.testResults.nonBlockingBuilds, self.health);
     });
   }
 
-  function refreshGoogleInternalCI() {
+  function refreshContinuousTests() {
     dataService.getData('google-internal-ci').then(function successCallback(response) {
-      var result = getE2E(response.data);
-      self.builds = result.builds;
-      updateBuildStability(self.builds, self.health);
-      self.failedBuild = result.failedBuild;
+      self.testResults = processTests(response.data);
+      updateBuildStability(self.testResults.blockingBuilds, self.testResults.nonBlockingBuilds, self.health);
     });
   }
 
-  function getE2E(builds) {
-    var result = [];
-    var failedBuild = false;
+  function processTests(builds) {
+    var blockingResult = [];
+    var nonBlockingResult = [];
+    var redBuilds = false;
+    var yellowBuilds = false;
     angular.forEach(builds, function(job, key) {
       var obj = {
         'name': key,
         'id': job.ID,
       };
-      if (job.Status == 'Stable') {
-        // green check mark
-        obj.state = '\u2713';
-        obj.color = 'green';
-      } else if (job.Status == 'Not Stable') {
-        // red X mark
-        obj.state = '\u2716';
-        obj.color = 'red';
-        failedBuild = true;
-      } else {
-        obj.state = 'Error';
-        obj.color = 'red';
-        obj.msg = job.Status;
-        failedBuild = true;
+      switch (job.Status) {
+        case 'Stable':
+          // green check mark
+          obj.state = '\u2713';
+          obj.color = 'green';
+          break;
+        case 'Not Stable':
+          // red X mark
+          obj.state = '\u2716';
+          obj.color = 'red';
+          redBuilds = true;
+          break;
+        case 'Ignorable flake':
+          // orange X mark
+          obj.state = '\u2716';
+          obj.color = '#FF8A65';
+          obj.msg = 'Flake!';
+          yellowBuilds = true;
+          break;
+        case 'Problem Resolved':
+          // orange X mark
+          obj.state = '\u2716';
+          obj.color = '#FF8A65';
+          obj.msg = 'Manual override';
+          yellowBuilds = true;
+          break;
+        case '[nonblocking] Stable':
+          // green check mark
+          obj.state = '\u2713';
+          obj.color = 'green';
+          obj.msg = '[nonblocking]';
+          break;
+        case '[nonblocking] Not Stable':
+          // orange X mark
+          obj.state = '\u2716';
+          obj.color = '#FF8A65';
+          obj.msg = '[nonblocking]';
+          break;
+        case '[nonblocking] Ignorable flake':
+          // orange X mark
+          obj.state = '\u2716';
+          obj.color = '#FF8A65';
+          obj.msg = '[nonblocking] Flake!';
+          break;
+        default:
+          obj.state = 'Error';
+          obj.color = 'red';
+          obj.msg = job.Status;
+          redBuilds = true;
       }
       obj.stability = '';
-      result.push(obj);
+      if (!obj.msg) {
+        blockingResult.push(obj);
+      } else {
+        if (obj.msg.includes('[nonblocking]')) {
+          obj.msg = obj.msg.replace('[nonblocking]', '');
+          nonBlockingResult.push(obj);
+        } else {
+          blockingResult.push(obj);
+        }
+      }
     });
+    if (redBuilds) {
+      yellowBuilds = false;
+    }
     return {
-      builds: result,
-      failedBuild: failedBuild,
+      blockingBuilds: blockingResult,
+      nonBlockingBuilds: nonBlockingResult,
+      yellowBuilds: yellowBuilds,
+      redBuilds: redBuilds,
     };
   }
 
-  function updateBuildStability(builds, health) {
-    if (Object.keys(builds).length === 0 ||
+  function updateBuildStabilityHelper(builds, health) {
+    if (builds === undefined || Object.keys(builds).length === 0 ||
         health.TotalLoops === 0 || health.NumStablePerJob === undefined) {
       return;
     }
@@ -230,6 +284,11 @@ function SQCntl(dataService, $interval, $location) {
         build.stability = Math.round(percentStable) + "%"
       }
     });
+  }
+
+  function updateBuildStability(blockingBuilds, nonBlockingBuilds, health) {
+    updateBuildStabilityHelper(blockingBuilds, health);
+    updateBuildStabilityHelper(nonBlockingBuilds, health);
   }
 
   function searchTermsContain(terms, value) {

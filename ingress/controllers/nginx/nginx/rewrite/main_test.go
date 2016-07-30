@@ -22,6 +22,8 @@ import (
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/util/intstr"
+
+	"k8s.io/contrib/ingress/controllers/nginx/nginx/config"
 )
 
 const (
@@ -72,8 +74,8 @@ func TestAnnotations(t *testing.T) {
 	}
 
 	f := ingAnnotations(ing.GetAnnotations()).addBaseURL()
-	if f != false {
-		t.Error("Expected false in add-base-url but %v was returend", f)
+	if f {
+		t.Errorf("Expected false in add-base-url but %v was returend", f)
 	}
 
 	data := map[string]string{}
@@ -83,18 +85,18 @@ func TestAnnotations(t *testing.T) {
 
 	r = ingAnnotations(ing.GetAnnotations()).rewriteTo()
 	if r != defRoute {
-		t.Error("Expected %v in rewrite but %v was returend", defRoute, r)
+		t.Errorf("Expected %v in rewrite but %v was returend", defRoute, r)
 	}
 
 	f = ingAnnotations(ing.GetAnnotations()).addBaseURL()
-	if f != true {
-		t.Error("Expected true in add-base-url but %v was returend", f)
+	if !f {
+		t.Errorf("Expected true in add-base-url but %v was returend", f)
 	}
 }
 
 func TestWithoutAnnotations(t *testing.T) {
 	ing := buildIngress()
-	_, err := ParseAnnotations(ing)
+	_, err := ParseAnnotations(config.NewDefault(), ing)
 	if err == nil {
 		t.Error("Expected error with ingress without annotations")
 	}
@@ -107,12 +109,37 @@ func TestRedirect(t *testing.T) {
 	data[rewriteTo] = defRoute
 	ing.SetAnnotations(data)
 
-	redirect, err := ParseAnnotations(ing)
+	redirect, err := ParseAnnotations(config.NewDefault(), ing)
 	if err != nil {
 		t.Errorf("Uxpected error with ingress: %v", err)
 	}
 
 	if redirect.Target != defRoute {
 		t.Errorf("Expected %v as redirect but returned %s", defRoute, redirect.Target)
+	}
+}
+
+func TestSSLRedirect(t *testing.T) {
+	ing := buildIngress()
+
+	cfg := config.Configuration{SSLRedirect: true}
+
+	data := map[string]string{}
+
+	ing.SetAnnotations(data)
+
+	redirect, _ := ParseAnnotations(cfg, ing)
+
+	if !redirect.SSLRedirect {
+		t.Errorf("Expected true but returned false")
+	}
+
+	data[sslRedirect] = "false"
+	ing.SetAnnotations(data)
+
+	redirect, _ = ParseAnnotations(cfg, ing)
+
+	if redirect.SSLRedirect {
+		t.Errorf("Expected false but returned true")
 	}
 }

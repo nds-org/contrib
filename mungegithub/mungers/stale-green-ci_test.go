@@ -32,21 +32,39 @@ import (
 	"github.com/google/go-github/github"
 )
 
+const (
+	jenkinsE2EContext    = "Jenkins GCE e2e"
+	jenkinsUnitContext   = "Jenkins unit/integration"
+	jenkinsVerifyContext = "Jenkins verification"
+	jenkinsNodeContext   = "Jenkins GCE Node e2e"
+)
+
 var (
 	_ = fmt.Printf
 	_ = glog.Errorf
+
+	requiredContexts = []string{
+		jenkinsUnitContext,
+		jenkinsE2EContext,
+		jenkinsNodeContext,
+		jenkinsVerifyContext,
+	}
 )
 
 func timePtr(t time.Time) *time.Time { return &t }
 
 func NowStatus() *github.CombinedStatus {
-	status := github_test.Status("mysha", []string{travisContext, jenkinsUnitContext, jenkinsE2EContext}, nil, nil, nil)
+	status := github_test.Status("mysha", requiredContexts, nil, nil, nil)
 	for i := range status.Statuses {
 		s := &status.Statuses[i]
 		s.CreatedAt = timePtr(time.Now())
 		s.UpdatedAt = timePtr(time.Now())
 	}
 	return status
+}
+
+func OldStatus() *github.CombinedStatus {
+	return github_test.Status("mysha", requiredContexts, nil, nil, nil)
 }
 
 func TestOldUnitTestMunge(t *testing.T) {
@@ -60,7 +78,7 @@ func TestOldUnitTestMunge(t *testing.T) {
 		{
 			name:     "Test0",
 			tested:   true,
-			ciStatus: SuccessStatus(), // Ran at time.Unix(0,0)
+			ciStatus: OldStatus(), // Ran at time.Unix(0,0)
 		},
 		{
 			name:     "Test1",
@@ -72,7 +90,7 @@ func TestOldUnitTestMunge(t *testing.T) {
 		issueNum := testNum + 1
 		tested := false
 
-		issue := NoOKToMergeIssue()
+		issue := LGTMIssue()
 		issue.Number = intPtr(issueNum)
 		pr := ValidPR()
 		pr.Number = intPtr(issueNum)
@@ -126,6 +144,9 @@ func TestOldUnitTestMunge(t *testing.T) {
 			t.Fatalf("%v", err)
 		}
 
+		s.getRetestContexts = func() []string {
+			return requiredContexts
+		}
 		s.Munge(obj)
 
 		if tested != test.tested {

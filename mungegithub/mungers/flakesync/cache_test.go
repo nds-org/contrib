@@ -18,6 +18,7 @@ package flakesync
 
 import (
 	"reflect"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -42,25 +43,34 @@ func TestBasic(t *testing.T) {
 	if !reflect.DeepEqual(r1, r2) {
 		t.Errorf("expected to match: %#v, %#v", r1, r2)
 	}
-	i := 6
-	for len(c.Flakes()) == 0 {
+	for i := 0; len(c.Flakes()) == 0; i++ {
 		c.Get("foo", Number(i))
 	}
 }
 
 func TestThreading(t *testing.T) {
+	// Test multi-threading even in single threaded environments (like
+	// travis).
+	runtime.GOMAXPROCS(10)
 	c := NewCache(makeRandom)
+	c.maxFlakes = 15
 	wg := sync.WaitGroup{}
-	const threads = 100
+	const threads = 30
 	wg.Add(threads)
 	for i := 0; i < threads; i++ {
 		go func(s int) {
 			defer wg.Done()
-			for n := 0; n < 80; n++ {
+			for n := 0; n < 30; n++ {
 				// n*s means many collide a few times, but some do not
 				c.Get("foo", Number(n*s))
+			}
+			if len(c.Flakes()) > 15 {
+				t.Errorf("Max flakes doesn't seem to work, got %v", len(c.Flakes()))
 			}
 		}(i)
 	}
 	wg.Wait()
+	if len(c.Flakes()) > 15 {
+		t.Errorf("Max flakes doesn't seem to work, got %v", len(c.Flakes()))
+	}
 }
