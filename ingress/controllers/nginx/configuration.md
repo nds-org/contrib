@@ -37,17 +37,18 @@ The following annotations are supported:
 
 |Name                 |type|
 |---------------------------|------|
-|[ingress.kubernetes.io/rewrite-target](#rewrite)|URI|
 |[ingress.kubernetes.io/add-base-url](#rewrite)|true or false|
+|[ingress.kubernetes.io/auth-realm](#authentication)|string|
+|[ingress.kubernetes.io/auth-secret](#authentication)|string|
+|[ingress.kubernetes.io/auth-type](#authentication)|basic or digest|
+|[ingress.kubernetes.io/auth-url](#external-authentication)|string|
 |[ingress.kubernetes.io/limit-connections](#rate-limiting)|number|
 |[ingress.kubernetes.io/limit-rps](#rate-limiting)|number|
-|[ingress.kubernetes.io/auth-type](#authentication)|basic or digest|
-|[ingress.kubernetes.io/auth-secret](#authentication)|string|
-|[ingress.kubernetes.io/auth-realm](#authentication)|string|
+|[ingress.kubernetes.io/rewrite-target](#rewrite)|URI|
+|[ingress.kubernetes.io/secure-backends](#secure-backends)|true or false|
 |[ingress.kubernetes.io/ssl-redirect](#server-side-https-enforcement-through-redirect)|true or false|
 |[ingress.kubernetes.io/upstream-max-fails](#custom-nginx-upstream-checks)|number|
 |[ingress.kubernetes.io/upstream-fail-timeout](#custom-nginx-upstream-checks)|number|
-|[ingress.kubernetes.io/secure-backends](#secure-backends)|true or false|
 |[ingress.kubernetes.io/whitelist-source-range](#whitelist-source-range)|CIDR|
 
 
@@ -58,6 +59,19 @@ The NGINX template is located in the file `/etc/nginx/template/nginx.tmpl`. Moun
 Use the [custom-template](examples/custom-template/README.md) example as a guide
 
 **Please note the template is tied to the go code. Be sure to no change names in the variable `$cfg`**
+
+To know more about the template please check the [Go template package](https://golang.org/pkg/text/template/)
+Additionally to the built-in functions provided by the go package this were added:
+  - empty: returns true if the specified parameter (string) is empty
+  - contains: [strings.Contains](https://golang.org/pkg/strings/#Contains)
+  - hasPrefix: [strings.HasPrefix](https://golang.org/pkg/strings/#Contains)
+  - hasSuffix: [strings.HasSuffix](https://golang.org/pkg/strings/#HasSuffix)
+  - toUpper: [strings.ToUpper](https://golang.org/pkg/strings/#ToUpper)
+  - toLower: [strings.ToLower](https://golang.org/pkg/strings/#ToLower)
+  - buildLocation: helper to build the NGINX Location section in each server
+  - buildProxyPass: builds the reverse proxy configuration
+  - buildRateLimitZones: helper to build all the required rate limit zones
+  - buildRateLimit:  helper to build a limit zone inside a location if contains a rate limit annotation
 
 
 ### Custom NGINX upstream checks
@@ -103,7 +117,19 @@ The secret must be created in the same namespace than the Ingress rule
 ingress.kubernetes.io/auth-realm:"realm string"
 ```
 
-Please check the [auth](examples/custom-upstream-check/README.md) example
+Please check the [auth](examples/auth/README.md) example
+
+
+### External Authentication
+
+To use an existing service that provides authentication the Ingress rule can be annotated with `ingress.kubernetes.io/auth-url` to indicate the URL where the HTTP request should be sent.
+Additionally is possible to set `ingress.kubernetes.io/auth-method` to specify the HTTP method to use (GET or POST) and `ingress.kubernetes.io/auth-send-body` to true or false (default).
+
+```
+ingress.kubernetes.io/auth-url:"URL to the authentication service"
+```
+
+Please check the [external-auth](examples/external-auth/README.md) example
 
 
 ### Rewrite
@@ -198,6 +224,9 @@ http://nginx.org/en/docs/http/ngx_http_core_module.html#keepalive_timeout
 **proxy-send-timeout:** Sets the timeout in seconds for [transmitting a request to the proxied server](http://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_send_timeout). The timeout is set only between two successive write operations, not for the transmission of the whole request.
 
 
+**proxy-buffer-size:** Sets the size of the buffer used for [reading the first part of the response](http://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffer_size) received from the proxied server. This part usually contains a small response header.`
+
+
 **resolver:** Configures name servers used to [resolve](http://nginx.org/en/docs/http/ngx_http_core_module.html#resolver) names of upstream servers into addresses
 
 
@@ -282,7 +311,6 @@ Responses with the "text/html" type are always compressed if `use-gzip` is enabl
 
 ### Default configuration options
 
-Running `/nginx-ingress-controller --dump-nginx-configuration` is possible to get the value of the options that can be changed.
 The next table shows the options, the default value and a description
 
 |name                 |default|

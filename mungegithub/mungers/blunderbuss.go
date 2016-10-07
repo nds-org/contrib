@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -52,7 +52,9 @@ func init() {
 func (b *BlunderbussMunger) Name() string { return "blunderbuss" }
 
 // RequiredFeatures is a slice of 'features' that must be provided
-func (b *BlunderbussMunger) RequiredFeatures() []string { return []string{features.RepoFeatureName} }
+func (b *BlunderbussMunger) RequiredFeatures() []string {
+	return []string{features.RepoFeatureName, features.AliasesFeature}
+}
 
 // Initialize will initialize the munger
 func (b *BlunderbussMunger) Initialize(config *github.Config, features *features.Features) error {
@@ -114,6 +116,11 @@ func (b *BlunderbussMunger) Munge(obj *github.MungeObject) {
 		if fileOwners.Len() == 0 {
 			glog.Warningf("Couldn't find an owner for: %s", *file.Filename)
 		}
+
+		if b.features.Aliases != nil && b.features.Aliases.IsEnabled {
+			fileOwners = b.features.Aliases.Expand(fileOwners)
+		}
+
 		for _, owner := range fileOwners.List() {
 			if owner == *issue.User.Login {
 				continue

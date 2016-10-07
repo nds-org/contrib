@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,11 +30,11 @@ import (
 )
 
 const (
-	lgtmRemovedBody = "PR changed after LGTM, removing LGTM. %s"
+	lgtmRemovedBody = "/lgtm cancel //PR changed after LGTM, removing LGTM. %s"
 )
 
 var (
-	lgtmRemovedRegex = regexp.MustCompile("PR changed after LGTM, removing LGTM.")
+	lgtmRemovedRegex = regexp.MustCompile("/lgtm cancel //PR changed after LGTM, removing LGTM.")
 )
 
 // LGTMAfterCommitMunger will remove the LGTM flag from an PR which has been
@@ -99,10 +99,10 @@ func (LGTMAfterCommitMunger) isStaleComment(obj *github.MungeObject, comment *gi
 	if !lgtmRemovedRegex.MatchString(*comment.Body) {
 		return false
 	}
-	if !obj.HasLabel("lgtm") {
+	if !obj.HasLabel(lgtmLabel) {
 		return false
 	}
-	lgtmTime := obj.LabelTime("lgtm")
+	lgtmTime := obj.LabelTime(lgtmLabel)
 	if lgtmTime == nil {
 		return false
 	}

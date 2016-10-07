@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
+	"reflect"
 	"time"
 
 	"k8s.io/contrib/cluster-autoscaler/cloudprovider"
@@ -132,7 +134,7 @@ func CheckGroupsAndNodes(nodes []*kube_api.Node, cloudProvider cloudprovider.Clo
 		if err != nil {
 			return err
 		}
-		if group == nil {
+		if group == nil || reflect.ValueOf(group).IsNil() {
 			continue
 		}
 		id := group.Id()
@@ -162,7 +164,7 @@ func GetNodeInfosForGroups(nodes []*kube_api.Node, cloudProvider cloudprovider.C
 		if err != nil {
 			return map[string]*schedulercache.NodeInfo{}, err
 		}
-		if nodeGroup == nil {
+		if nodeGroup == nil || reflect.ValueOf(nodeGroup).IsNil() {
 			continue
 		}
 		id := nodeGroup.Id()
@@ -180,7 +182,8 @@ func GetNodeInfosForGroups(nodes []*kube_api.Node, cloudProvider cloudprovider.C
 // BestExpansionOption picks the best cluster expansion option.
 func BestExpansionOption(expansionOptions []ExpansionOption) *ExpansionOption {
 	if len(expansionOptions) > 0 {
-		return &expansionOptions[0]
+		pos := rand.Int31n(int32(len(expansionOptions)))
+		return &expansionOptions[pos]
 	}
 	return nil
 }

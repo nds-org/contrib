@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -52,6 +52,8 @@ const (
 
 	headerRateRemaining = "X-RateLimit-Remaining"
 	headerRateReset     = "X-RateLimit-Reset"
+
+	maxCommentLen = 65535
 )
 
 var (
@@ -147,6 +149,7 @@ type Config struct {
 	State  string
 	Labels []string
 
+	// token is private so it won't get printed in the logs.
 	token     string
 	TokenFile string
 
@@ -162,8 +165,8 @@ type Config struct {
 	// If true, don't make any mutating API calls
 	DryRun bool
 
-	// Defaults to 30 seconds.
-	PendingWaitTime *time.Duration
+	// Base sleep time for retry loops. Defaults to 1 second.
+	BaseWaitTime time.Duration
 
 	// When we clear analytics we store the last values here
 	lastAnalytics analytics
@@ -273,6 +276,11 @@ type MungeObject struct {
 	Annotations map[string]string //annotations are things you can set yourself.
 }
 
+// Number is short for *obj.Issue.Number.
+func (obj *MungeObject) Number() int {
+	return *obj.Issue.Number
+}
+
 // DebugStats is a structure that tells information about how we have interacted
 // with github
 type DebugStats struct {
@@ -302,7 +310,7 @@ func TestObject(config *Config, issue *github.Issue, pr *github.PullRequest, com
 // AddRootFlags will add all of the flags needed for the github config to the cobra command
 func (config *Config) AddRootFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&config.token, "token", "", "The OAuth Token to use for requests.")
-	cmd.PersistentFlags().StringVar(&config.TokenFile, "token-file", "", "The file containing the OAuth Token to use for requests.")
+	cmd.PersistentFlags().StringVar(&config.TokenFile, "token-file", "", "The file containing the OAuth token to use for requests.")
 	cmd.PersistentFlags().IntVar(&config.MinPRNumber, "min-pr-number", 0, "The minimum PR to start with")
 	cmd.PersistentFlags().IntVar(&config.MaxPRNumber, "max-pr-number", maxInt, "The maximum PR to start with")
 	cmd.PersistentFlags().BoolVar(&config.DryRun, "dry-run", true, "If true, don't actually merge anything")
@@ -315,6 +323,11 @@ func (config *Config) AddRootFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&config.HTTPCacheDir, "http-cache-dir", "", "Path to directory where github data can be cached across restarts, if unset use in memory cache")
 	cmd.PersistentFlags().Uint64Var(&config.HTTPCacheSize, "http-cache-size", 1000, "Maximum size for the HTTP cache (in MB)")
 	cmd.PersistentFlags().AddGoFlagSet(goflag.CommandLine)
+}
+
+// Token returns the token
+func (config *Config) Token() string {
+	return config.token
 }
 
 // PreExecute will initialize the Config. It MUST be run before the config
@@ -334,6 +347,7 @@ func (config *Config) PreExecute() error {
 			glog.Fatalf("error reading token file: %v", err)
 		}
 		token = strings.TrimSpace(string(data))
+		config.token = token
 	}
 
 	// We need to get our Transport/RoundTripper in order based on arguments
@@ -588,33 +602,62 @@ func (obj *MungeObject) LastModifiedTime() *time.Time {
 	return lastModified
 }
 
-// labelEvent returns the most recent event where the given label was added to an issue
-func (obj *MungeObject) labelEvent(label string) *github.IssueEvent {
+// FirstLabelTime returns the first time the request label was added to an issue.
+// If the label was never added you will get a nil time.
+func (obj *MungeObject) FirstLabelTime(label string) *time.Time {
+	event := obj.labelEvent(label, firstTime)
+	if event == nil {
+		return nil
+	}
+	return event.CreatedAt
+}
+
+// Return true if 'a' is preferable to 'b'. Handle nil times!
+type timePred func(a, b *time.Time) bool
+
+func firstTime(a, b *time.Time) bool {
+	if a == nil {
+		return false
+	}
+	if b == nil {
+		return true
+	}
+	return !a.After(*b)
+}
+func lastTime(a, b *time.Time) bool {
+	if a == nil {
+		return false
+	}
+	if b == nil {
+		return true
+	}
+	return a.After(*b)
+}
+
+// labelEvent returns the event where the given label was added to an issue.
+// 'pred' is used to select which label event is chosen if there are multiple.
+func (obj *MungeObject) labelEvent(label string, pred timePred) *github.IssueEvent {
 	var labelTime *time.Time
 	var out *github.IssueEvent
 	events, err := obj.GetEvents()
 	if err != nil {
 		return out
 	}
-	index := 0
-	for i, event := range events {
+	for _, event := range events {
 		if *event.Event == "labeled" && *event.Label.Name == label {
-			if labelTime == nil || event.CreatedAt.After(*labelTime) {
+			if pred(event.CreatedAt, labelTime) {
 				labelTime = event.CreatedAt
 				out = event
-				index = i
 			}
 		}
 	}
-	// Want this information next time we hit the bug where it can't find the most recent LGTM label.
-	glog.Infof("%v labelEvent: searched %v events for label %v, found at index %v", *obj.Issue.Number, len(events), label, index)
 	return out
 }
 
 // LabelTime returns the last time the request label was added to an issue.
-// If the label was never added you will get the 0 time.
+// If the label was never added you will get a nil time.
 func (obj *MungeObject) LabelTime(label string) *time.Time {
-	event := obj.labelEvent(label)
+	event := obj.labelEvent(label, lastTime)
 	if event == nil {
 		return nil
 	}
@@ -623,7 +666,7 @@ func (obj *MungeObject) LabelTime(label string) *time.Time {
 
 // LabelCreator returns the login name of the user who (last) created the given label
 func (obj *MungeObject) LabelCreator(label string) string {
-	event := obj.labelEvent(label)
+	event := obj.labelEvent(label, lastTime)
 	if event == nil || event.Actor == nil || event.Actor.Login == nil {
 		return ""
 	}
@@ -685,6 +728,11 @@ func (obj *MungeObject) AddLabels(labels []string) error {
 	prNum := *obj.Issue.Number
 	config.analytics.AddLabels.Call(config, nil)
 	glog.Infof("Adding labels %v to PR %d", labels, prNum)
+	if len(labels) == 0 {
+		glog.Info("No labels to add: quitting")
+		return nil
+	}
+
 	if config.DryRun {
 		return nil
 	}
@@ -1137,8 +1185,8 @@ func (obj *MungeObject) doWaitStatus(pending bool, requiredContexts []string, c 
 		}
 		sleepTime := 30 * time.Second
 		// If the time was explicitly set, use that instead
-		if config.PendingWaitTime != nil {
-			sleepTime = *config.PendingWaitTime
+		if config.BaseWaitTime != 0 {
+			sleepTime = 30 * config.BaseWaitTime
 		}
 		if pending {
 			glog.V(4).Infof("PR# %d is not pending, waiting for %f seconds", *obj.Issue.Number, sleepTime.Seconds())
@@ -1508,21 +1556,38 @@ func (obj *MungeObject) ListReviewComments() ([]*github.PullRequestComment, erro
 	prNum := *pr.Number
 	allComments := []*github.PullRequestComment{}
 
-	listOpts := &github.PullRequestListCommentsOptions{}
+	listOpts := &github.PullRequestListCommentsOptions{ListOptions: github.ListOptions{PerPage: 100}}
 
 	config := obj.config
 	page := 1
+	// Try to work around not finding comments--suspect some cache invalidation bug when the number of pages changes.
+	tryNextPageAnyway := false
 	for {
 		listOpts.ListOptions.Page = page
 		glog.V(8).Infof("Fetching page %d of comments for issue %d", page, prNum)
 		comments, response, err := obj.config.client.PullRequests.ListComments(config.Org, config.Project, prNum, listOpts)
 		config.analytics.ListReviewComments.Call(config, response)
 		if err != nil {
+			if tryNextPageAnyway {
+				// Cached last page was actually truthful -- expected error.
+				break
+			}
 			return nil, err
+		}
+		if tryNextPageAnyway {
+			if len(comments) == 0 {
+				break
+			}
+			glog.Infof("For %v: supposedly there weren't more review comments, but we asked anyway and found %v more.", prNum, len(comments))
+			tryNextPageAnyway = false
 		}
 		allComments = append(allComments, comments...)
 		if response.LastPage == 0 || response.LastPage <= page {
-			break
+			if len(allComments)%100 == 0 {
+				tryNextPageAnyway = true
+			} else {
+				break
+			}
 		}
 		page++
 	}
@@ -1530,8 +1595,11 @@ func (obj *MungeObject) ListReviewComments() ([]*github.PullRequestComment, erro
 	return allComments, nil
 }
 
+// WithListOpt configures the options to list comments of github issue.
+type WithListOpt func(*github.IssueListCommentsOptions) *github.IssueListCommentsOptions
+
 // ListComments returns all comments for the issue/PR in question
-func (obj *MungeObject) ListComments() ([]*github.IssueComment, error) {
+func (obj *MungeObject) ListComments(withListOpts ...WithListOpt) ([]*github.IssueComment, error) {
 	config := obj.config
 	issueNum := *obj.Issue.Number
 	allComments := []*github.IssueComment{}
@@ -1540,20 +1608,40 @@ func (obj *MungeObject) ListComments() ([]*github.IssueComment, error) {
 		return obj.comments, nil
 	}
 
-	listOpts := &github.IssueListCommentsOptions{}
+	listOpts := &github.IssueListCommentsOptions{ListOptions: github.ListOptions{PerPage: 100}}
+	for _, withListOpt := range withListOpts {
+		listOpts = withListOpt(listOpts)
+	}
 
 	page := 1
+	// Try to work around not finding comments--suspect some cache invalidation bug when the number of pages changes.
+	tryNextPageAnyway := false
 	for {
 		listOpts.ListOptions.Page = page
 		glog.V(8).Infof("Fetching page %d of comments for issue %d", page, issueNum)
 		comments, response, err := obj.config.client.Issues.ListComments(config.Org, config.Project, issueNum, listOpts)
 		config.analytics.ListComments.Call(config, response)
 		if err != nil {
+			if tryNextPageAnyway {
+				// Cached last page was actually truthful -- expected error.
+				break
+			}
 			return nil, err
+		}
+		if tryNextPageAnyway {
+			if len(comments) == 0 {
+				break
+			}
+			glog.Infof("For %v: supposedly there weren't more comments, but we asked anyway and found %v more.", issueNum, len(comments))
+			tryNextPageAnyway = false
 		}
 		allComments = append(allComments, comments...)
 		if response.LastPage == 0 || response.LastPage <= page {
-			break
+			if len(comments)%100 == 0 {
+				tryNextPageAnyway = true
+			} else {
+				break
+			}
 		}
 		page++
 	}
@@ -1564,11 +1652,19 @@ func (obj *MungeObject) ListComments() ([]*github.IssueComment, error) {
 // WriteComment will send the `msg` as a comment to the specified PR
 func (obj *MungeObject) WriteComment(msg string) error {
 	config := obj.config
-	prNum := *obj.Issue.Number
+	prNum := obj.Number()
 	config.analytics.CreateComment.Call(config, nil)
-	glog.Infof("Commenting %q in %d", msg, prNum)
+	comment := msg
+	if len(comment) > 512 {
+		comment = comment[:512]
+	}
+	glog.Infof("Commenting in %d: %q", prNum, comment)
 	if config.DryRun {
 		return nil
+	}
+	if len(msg) > maxCommentLen {
+		glog.Info("Comment in %d was larger than %d and was truncated", prNum, maxCommentLen)
+		msg = msg[:maxCommentLen]
 	}
 	if _, _, err := config.client.Issues.CreateComment(config.Org, config.Project, prNum, &github.IssueComment{Body: &msg}); err != nil {
 		glog.Errorf("%v", err)
@@ -1640,7 +1736,11 @@ func (obj *MungeObject) IsMergeable() (bool, error) {
 		// Sleep for 2-32 seconds on successive attempts.
 		// Worst case, we'll wait for up to a minute for GitHub
 		// to compute it before bailing out.
-		time.Sleep((1 << uint(try)) * time.Second)
+		baseDelay := time.Second
+		if obj.config.BaseWaitTime != 0 { // Allow shorter delays in tests.
+			baseDelay = obj.config.BaseWaitTime
+		}
+		time.Sleep((1 << uint(try)) * baseDelay)
 		err := obj.Refresh()
 		if err != nil {
 			glog.Errorf("Unable to refresh PR# %d: %v", prNum, err)

@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -64,13 +64,13 @@ func (h *HealthChecks) Add(port int64) error {
 			return err
 		}
 	} else if wantHC.RequestPath != hc.RequestPath {
-		// TODO: also compare headers interval etc.
-		glog.Infof("Updating health check %v, path %v -> %v", name, hc.RequestPath, wantHC.RequestPath)
-		if err := h.cloud.UpdateHttpHealthCheck(wantHC); err != nil {
-			return err
-		}
+		// TODO: reconcile health checks, and compare headers interval etc.
+		// Currently Ingress doesn't expose all the health check params
+		// natively, so some users prefer to hand modify the check.
+		glog.Infof("Unexpected request path on health check %v, has %v want %v, NOT reconciling",
+			name, hc.RequestPath, wantHC.RequestPath)
 	} else {
-		glog.Infof("Health check %v already exists", hc.Name)
+		glog.Infof("Health check %v already exists and has the expected path %v", hc.Name, hc.RequestPath)
 	}
 	return nil
 }

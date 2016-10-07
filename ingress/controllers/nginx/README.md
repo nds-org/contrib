@@ -1,6 +1,6 @@
 # Nginx Ingress Controller
 
-This is a nginx Ingress controller that uses [ConfigMap](https://github.com/kubernetes/kubernetes/blob/master/docs/proposals/configmap.md) to store the nginx configuration. See [Ingress controller documentation](../README.md) for details on how it works.
+This is an nginx Ingress controller that uses [ConfigMap](https://github.com/kubernetes/kubernetes/blob/master/docs/design/configmap.md) to store the nginx configuration. See [Ingress controller documentation](../README.md) for details on how it works.
 
 ## Contents
 * [Conventions](#conventions)
@@ -18,8 +18,13 @@ This is a nginx Ingress controller that uses [ConfigMap](https://github.com/kube
 * [Proxy Protocol](#proxy-protocol)
 * [NGINX customization](configuration.md)
 * [NGINX status page](#nginx-status-page)
+* [Running multiple ingress controllers](#running-multiple-ingress-controllers)
+* [Running on Cloudproviders](#running-on-cloudproviders)
 * [Disabling NGINX ingress controller](#disabling-nginx-ingress-controller)
+* [Log format](#log-format)
+* [Local cluster](#local-cluster)
 * [Debug & Troubleshooting](#troubleshooting)
+* [Why endpoints and not services?](#why-endpoints-and-not-services)
 * [Limitations](#limitations)
 * [NGINX Notes](#nginx-notes)
 
@@ -27,7 +32,7 @@ This is a nginx Ingress controller that uses [ConfigMap](https://github.com/kube
 
 Anytime we reference a tls secret, we mean (x509, pem encoded, RSA 2048, etc). You can generate such a certificate with: 
 `openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout $(KEY) -out $(CERT) -subj "/CN=$(HOST)/O=$(HOST)"`
-and creat the secret via `kubectl create secret tls --key file --cert file`
+and create the secret via `kubectl create secret tls --key file --cert file`
 
 
 
@@ -138,7 +143,7 @@ Check the [example](examples/tls/README.md)
 
 ### Default SSL Certificate
 
-NGINX provides the option serve rname [_](http://nginx.org/en/docs/http/server_names.html) as a catch-all in case of requests that do not match one of the configured server names. This configuration works without issues for HTTP traffic. In case of HTTPS NGINX requires a certificate. For this reason the Ingress controller provides the flag `--default-ssl-certificate`. The secret behind this flag contains the default certificate to be used in the mentioned case.
+NGINX provides the option [server name](http://nginx.org/en/docs/http/server_names.html) as a catch-all in case of requests that do not match one of the configured server names. This configuration works without issues for HTTP traffic. In case of HTTPS NGINX requires a certificate. For this reason the Ingress controller provides the flag `--default-ssl-certificate`. The secret behind this flag contains the default certificate to be used in the mentioned case.
 If this flag is not provided NGINX will use a self signed certificate.
 
 Running without the flag `--default-ssl-certificate`:
@@ -190,7 +195,7 @@ $ curl -v https://10.2.78.7:443 -k
 * Connection #0 to host 10.2.78.7 left intact
 ```
 
-Specifyng `--default-ssl-certificate=default/foo-tls`:
+Specifying `--default-ssl-certificate=default/foo-tls`:
 
 ```
 core@localhost ~ $ curl -v https://10.2.78.7:443 -k
@@ -244,7 +249,7 @@ core@localhost ~ $ curl -v https://10.2.78.7:443 -k
 
 By default the controller redirects (301) to HTTPS if TLS is enabled for that ingress . If you want to disable that behaviour globally, you can use `ssl-redirect: "false"` in the NGINX config map.
 
-To configure this feature for specfic ingress resources, you can use the `ingress.kubernetes.io/ssl-redirect: "false"` annotation in theparticular resource.
+To configure this feature for specific ingress resources, you can use the `ingress.kubernetes.io/ssl-redirect: "false"` annotation in the particular resource.
 
 
 ### HTTP Strict Transport Security
@@ -313,7 +318,7 @@ Please check the [udp services](examples/udp/README.md) example
 
 ## Proxy Protocol
 
-If you are using a L4 proxy to forward the traffic to the NGINX pods and terminate HTTP/HTTPS there, you will lose the remote endpoint's IP addresses. To prevent this you could use the [Proxy Protocol](http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt) for forwarding traffic, this will send the connection details before forwarding the acutal TCP connection itself.
+If you are using a L4 proxy to forward the traffic to the NGINX pods and terminate HTTP/HTTPS there, you will lose the remote endpoint's IP addresses. To prevent this you could use the [Proxy Protocol](http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt) for forwarding traffic, this will send the connection details before forwarding the actual TCP connection itself.
 
 Amongst others [ELBs in AWS](http://docs.aws.amazon.com/ElasticLoadBalancing/latest/DeveloperGuide/enable-proxy-protocol.html) and [HAProxy](http://www.haproxy.org/) support Proxy Protocol.
 
@@ -331,7 +336,7 @@ Using this two headers is possible to use a custom backend service like [this on
 ### NGINX status page
 
 The ngx_http_stub_status_module module provides access to basic status information. This is the default module active in the url `/nginx_status`.
-This controller provides an alternitive to this module using [nginx-module-vts](https://github.com/vozlt/nginx-module-vts) third party module.
+This controller provides an alternative to this module using [nginx-module-vts](https://github.com/vozlt/nginx-module-vts) third party module.
 To use this module just provide a config map with the key `enable-vts-status=true`. The URL is exposed in the port 8080.
 Please check the example `example/rc-default.yaml`
 
@@ -339,9 +344,63 @@ Please check the example `example/rc-default.yaml`
 
 To extract the information in JSON format the module provides a custom URL: `/nginx_status/format/json`
 
+### Running multiple ingress controllers
+
+If you're running multiple ingress controllers, or running on a cloudprovider that natively handles 
+ingress, you need to specify the annotation `kubernetes.io/ingress.class: "nginx"` in all ingresses 
+that you would like this controller to claim. Not specifying the annotation will lead to multiple 
+ingress controllers claiming the same ingress. Specifying the wrong value will result in all ingress 
+controllers ignoring the ingress. Multiple ingress controllers running in the same cluster was not 
+supported in Kubernetes versions < 1.3.
+
+### Running on Cloudproviders
+
+If you're running this ingress controller on a cloudprovider, you should assume the provider also has a native 
+Ingress controller and specify the ingress.class annotation as indicated in this section.
+In addition to this, you will need to add a firewall rule for each port this controller is listening on, i.e :80 and :443.
+
 ### Disabling NGINX ingress controller
 
 Setting the annotation `kubernetes.io/ingress.class` to any value other than "nginx" or the empty string, will force the NGINX Ingress controller to ignore your Ingress. Do this if you wish to use one of the other Ingress controllers at the same time as the NGINX controller.
+
+### Log format
+
+The default configuration uses a custom logging format to add additional information about upstreams
+
+```
+    log_format upstreaminfo '{{ if $cfg.useProxyProtocol }}$proxy_protocol_addr{{ else }}$remote_addr{{ end }} - '
+        '[$proxy_add_x_forwarded_for] - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" '
+        '$request_length $request_time [$proxy_upstream_name] $upstream_addr $upstream_response_length $upstream_response_time $upstream_status';
+```
+
+Sources:
+  - [upstream variables](http://nginx.org/en/docs/http/ngx_http_upstream_module.html#variables)
+  - [embedded variables](http://nginx.org/en/docs/http/ngx_http_core_module.html#variables)
+
+Description:
+- `$proxy_protocol_addr`: if PROXY protocol is enabled
+- `$remote_addr`: if PROXY protocol is disabled (default)
+- `$proxy_add_x_forwarded_for`: the `X-Forwarded-For` client request header field with the $remote_addr variable appended to it, separated by a comma
+- `$remote_user`: user name supplied with the Basic authentication
+- `$time_local`: local time in the Common Log Format
+- `$request`: full original request line
+- `$status`: response status
+- `$body_bytes_sent`: number of bytes sent to a client, not counting the response header
+- `$http_referer`: value of the Referer header
+- `$http_user_agent`: value of User-Agent header
+- `$request_length`: request length (including request line, header, and request body)
+- `$request_time`: time elapsed since the first bytes were read from the client
+- `$proxy_upstream_name`: name of the upstream. The format is `upstream-<namespace>-<service name>-<service port>`
+- `$upstream_addr`: keeps the IP address and port, or the path to the UNIX-domain socket of the upstream server. If several servers were contacted during request processing, their addresses are separated by commas
+- `$upstream_response_length`: keeps the length of the response obtained from the upstream server
+- `$upstream_response_time`: keeps time spent on receiving the response from the upstream server; the time is kept in seconds with millisecond resolution
+- `$upstream_status`: keeps status code of the response obtained from the upstream server
+
+### Local cluster
+
+Using [`hack/local-up-cluster.sh`](https://github.com/kubernetes/kubernetes/blob/master/hack/local-up-cluster.sh) is possible to start a local kubernetes cluster consisting of a master and a single node. Please read [running-locally.md](https://github.com/kubernetes/kubernetes/blob/master/docs/devel/running-locally.md) for more details.
+
+Use of `hostNetwork: true` in the ingress controller is required to falls back at localhost:8080 for the apiserver if every other client creation check fails (eg: service account not present, kubeconfig doesn't exist, no master env vars...)
 
 
 ### Debug & Troubleshooting
@@ -378,19 +437,24 @@ I0316 12:24:37.610073       1 command.go:69] change in configuration detected. R
   * To fix the above, setup-files.sh must be patched before the cluster is inited (refer to https://github.com/kubernetes/kubernetes/pull/21504)
 
 
-## Limitations
+### Limitations
 
 - Ingress rules for TLS require the definition of the field `host`
 
 
-## NGINX notes
+### Why endpoints and not services
+
+The NGINX ingress controller does not uses [Services](http://kubernetes.io/docs/user-guide/services) to route traffic to the pods. Instead it uses the Endpoints API in order to bypass [kube-proxy](http://kubernetes.io/docs/admin/kube-proxy/) to allow NGINX features like session affinity and custom load balancing algorithms. It also removes some overhead, such as conntrack entries for iptables DNAT.
+
+
+### NGINX notes
 
 Since `gcr.io/google_containers/nginx-slim:0.8` NGINX contains the next patches:
 - Dynamic TLS record size [nginx__dynamic_tls_records.patch](https://blog.cloudflare.com/optimizing-tls-over-tcp-to-reduce-latency/)
 NGINX provides the parameter `ssl_buffer_size` to adjust the size of the buffer. Default value in NGINX is 16KB. The ingress controller changes the default to 4KB. This improves the [TLS Time To First Byte (TTTFB)](https://www.igvita.com/2013/12/16/optimizing-nginx-tls-time-to-first-byte/) but the size is fixed. This patches adapts the size of the buffer to the content is being served helping to improve the perceived latency.
 
 - Add SPDY support back to Nginx with HTTP/2 [nginx_1_9_15_http2_spdy.patch](https://github.com/cloudflare/sslconfig/pull/36)
-At the same NGINX introduced HTTP/2 support for SPDY was removed. This patch add support for SPDY wichout compromising HTTP/2 support using the Application-Layer Protocol Negotiation (ALPN) or Next Protocol Negotiation (NPN) Transport Layer Security (TLS) extension to negotiate what protocol the server and client support
+At the same NGINX introduced HTTP/2 support for SPDY was removed. This patch add support for SPDY without compromising HTTP/2 support using the Application-Layer Protocol Negotiation (ALPN) or Next Protocol Negotiation (NPN) Transport Layer Security (TLS) extension to negotiate what protocol the server and client support
 ```
 openssl s_client -servername www.my-site.com -connect www.my-site.com:443 -nextprotoneg ''
 CONNECTED(00000003)

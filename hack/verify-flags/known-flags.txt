@@ -1,4 +1,5 @@
 admin-port
+alias-file
 allowed-shame-domains
 api-token
 balance-algorithm
@@ -7,6 +8,7 @@ blunderbuss-config
 blunderbuss-reassign
 change-permissions
 chart-url
+cla-status-context
 cloud-config
 cloud-provider
 cluster-uid
@@ -51,6 +53,9 @@ issue-mungers
 issue-reports
 jenkins-host
 jenkins-jobs
+kube-api-content-type
+kubelet-host
+kubelet-port
 label-file
 last-release-pr
 left-build-number
@@ -122,3 +127,12 @@ retest-body
 default-ssl-certificate
 housekeeping-interval
 system-namespace
+initial-delay
+pod-scheduled-timeout
+netrc-dir
+publish-command
+triager-url
+datasource
+local-data-dir
+tracing
+jenkins-job

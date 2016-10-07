@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright 2015 The Kubernetes Authors All rights reserved.
+# Copyright 2015 The Kubernetes Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,4 +18,4 @@
 
 inventory=${INVENTORY:-${INVENTORY_DIR}/inventory}
 # no configure tag as it will reset everything to defaults
-ansible-playbook -i ${inventory} ${PLAYBOOKS_DIR}/deploy-etcd.yml --tags "install,restart" $@
+ansible-playbook -i ${inventory} ${PLAYBOOKS_DIR}/deploy-etcd.yml --tags "install,restart" "$@"

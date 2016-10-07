@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"k8s.io/kubernetes/pkg/util"
+	utilclock "k8s.io/kubernetes/pkg/util/clock"
 
 	"k8s.io/contrib/mungegithub/admin"
 	"k8s.io/contrib/mungegithub/features"
@@ -47,11 +47,15 @@ import (
 )
 
 const (
+	approvedLabel                  = "approved"
 	lgtmLabel                      = "lgtm"
 	retestNotRequiredLabel         = "retest-not-required"
 	retestNotRequiredDocsOnlyLabel = "retest-not-required-docs-only"
 	doNotMergeLabel                = "do-not-merge"
 	claYesLabel                    = "cla: yes"
+	claNoLabel                     = "cla: no"
+	cncfClaYesLabel                = "cncf-cla: yes"
+	cncfClaNoLabel                 = "cncf-cla: no"
 	claHumanLabel                  = "cla: human-approved"
 	sqContext                      = "Submit Queue"
 
@@ -174,7 +178,7 @@ type SubmitQueue struct {
 	prStatus      map[string]submitStatus // protected by sync.Mutex
 	statusHistory []submitStatus          // protected by sync.Mutex
 
-	clock         util.Clock
+	clock         utilclock.Clock
 	startTime     time.Time // when the queue started (duh)
 	lastMergeTime time.Time
 	totalMerges   int32
@@ -184,6 +188,7 @@ type SubmitQueue struct {
 	githubE2ERunning  *github.MungeObject         // protect by sync.Mutex!
 	githubE2EQueue    map[int]*github.MungeObject // protected by sync.Mutex!
 	githubE2EPollTime time.Duration
+	lgtmTimeCache     *mungerutil.LabelTimeCache
 
 	lastE2EStable bool // was e2e stable last time they were checked, protect by sync.Mutex
 	e2e           e2e.E2ETester
@@ -205,7 +210,7 @@ type SubmitQueue struct {
 }
 
 func init() {
-	clock := util.RealClock{}
+	clock := utilclock.RealClock{}
 	sq := &SubmitQueue{
 		clock:          clock,
 		startTime:      clock.Now(),
@@ -407,6 +412,8 @@ func (sq *SubmitQueue) internalInitialize(config *github.Config, features *featu
 			GoogleGCSBucketUtils: gcs,
 		}).Init(admin.Mux)
 	}
+
+	sq.lgtmTimeCache = mungerutil.NewLabelTimeCache(lgtmLabel)
 
 	if len(config.Address) > 0 {
 		if len(config.WWWRoot) > 0 {
@@ -775,7 +782,7 @@ func (sq *SubmitQueue) getMetaData() []byte {
 
 const (
 	unknown                 = "unknown failure"
-	noCLA                   = "PR does not have " + claYesLabel + " or " + claHumanLabel
+	noCLA                   = "PR is missing CLA label; needs one of " + claYesLabel + ", " + cncfClaYesLabel + " or " + claHumanLabel
 	noLGTM                  = "PR does not have LGTM."
 	lgtmEarly               = "The PR was changed after the LGTM label was added."
 	unmergeable             = "PR is unable to be automatically merged. Needs rebase."
@@ -830,7 +837,7 @@ func (sq *SubmitQueue) validForMerge(obj *github.MungeObject) bool {
 	}
 
 	// Must pass CLA checks
-	if !obj.HasLabel(claYesLabel) && !obj.HasLabel(claHumanLabel) {
+	if !obj.HasLabel(claYesLabel) && !obj.HasLabel(claHumanLabel) && !obj.HasLabel(cncfClaYesLabel) {
 		sq.SetMergeStatus(obj, noCLA)
 		return false
 	}
@@ -962,15 +969,18 @@ func priority(obj *github.MungeObject) int {
 	return prio
 }
 
-type queueSorter []*github.MungeObject
+type queueSorter struct {
+	queue          []*github.MungeObject
+	labelTimeCache *mungerutil.LabelTimeCache
+}
 
-func (s queueSorter) Len() int      { return len(s) }
-func (s queueSorter) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s queueSorter) Len() int      { return len(s.queue) }
+func (s queueSorter) Swap(i, j int) { s.queue[i], s.queue[j] = s.queue[j], s.queue[i] }
 
 // If you update the function PLEASE PLEASE PLEASE also update servePriorityInfo()
 func (s queueSorter) Less(i, j int) bool {
-	a := s[i]
-	b := s[j]
+	a := s.queue[i]
+	b := s.queue[j]
 
 	aPrio := priority(a)
 	bPrio := priority(b)
@@ -990,7 +1000,20 @@ func (s queueSorter) Less(i, j int) bool {
 		return false
 	}
 
-	return *a.Issue.Number < *b.Issue.Number
+	aTime, aOK := s.labelTimeCache.FirstLabelTime(a)
+	bTime, bOK := s.labelTimeCache.FirstLabelTime(b)
+
+	// Shouldn't really happen since these have been LGTMed to be
+	// in the queue at all. But just in case, .
+	if !aOK && bOK {
+		return false
+	} else if aOK && !bOK {
+		return true
+	} else if !aOK && !bOK {
+		return false
+	}
+
+	return aTime.Before(bTime)
 }
 
 // onQueue just tells if a PR is already on the queue.
@@ -1011,7 +1034,7 @@ func (sq *SubmitQueue) orderedE2EQueue() []int {
 	for _, obj := range sq.githubE2EQueue {
 		prs = append(prs, obj)
 	}
-	sort.Sort(queueSorter(prs))
+	sort.Sort(queueSorter{prs, sq.lgtmTimeCache})
 
 	var ordered []int
 	for _, obj := range prs {
@@ -1250,7 +1273,7 @@ func (sq *SubmitQueue) serveMergeInfo(res http.ResponseWriter, req *http.Request
 	var out bytes.Buffer
 	out.WriteString("PRs must meet the following set of conditions to be considered for automatic merging by the submit queue.")
 	out.WriteString("<ol>")
-	out.WriteString(fmt.Sprintf("<li>The PR must have the label %q or %q</li>", claYesLabel, claHumanLabel))
+	out.WriteString(fmt.Sprintf("<li>The PR must have the label %q, %q or %q </li>", claYesLabel, cncfClaYesLabel, claHumanLabel))
 	out.WriteString("<li>The PR must be mergeable. aka cannot need a rebase</li>")
 	if len(sq.RequiredStatusContexts) > 0 || len(sq.RequiredRetestContexts) > 0 {
 		out.WriteString("<li>All of the following github statuses must be green")
@@ -1305,7 +1328,11 @@ func (sq *SubmitQueue) servePriorityInfo(res http.ResponseWriter, req *http.Requ
       <li>PR with no release milestone will be considered after any PR with a milestone</li>
     </ul>
   </li>
-  <li>PR number</li>
+  <li>First time at which the LGTM label was applied.
+    <ul>
+      <li>This means all PRs start at the bottom of the queue (within their priority and milestone bands, of course) and progress towards the top.</li>
+    </ul>
+  </li>
 </ol> `))
 }
 

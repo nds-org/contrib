@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -60,7 +60,7 @@ const (
 	alphaNumericChar = "0"
 
 	// Current docker image version. Only used in debug logging.
-	imageVersion = "glbc:0.7.1"
+	imageVersion = "glbc:0.8.0"
 
 	// Key used to persist UIDs to configmaps.
 	uidConfigMapName = "ingress-uid"
@@ -162,12 +162,18 @@ func main() {
 	var kubeClient *client.Client
 	var err error
 	var clusterManager *controller.ClusterManager
+
+	// TODO: We can simply parse all go flags with
+	// flags.AddGoFlagSet(go_flag.CommandLine)
+	// but that pollutes --help output with a ton of standard go flags.
+	// We only really need a binary switch from light, v(2) logging to
+	// heavier debug style V(4) logging, which we use --verbose for.
 	flags.Parse(os.Args)
 	clientConfig := kubectl_util.DefaultClientConfig(flags)
 
-	// Set glog verbosity levels
+	// Set glog verbosity levels, unconditionally set --alsologtostderr.
+	go_flag.Lookup("logtostderr").Value.Set("true")
 	if *verbose {
-		go_flag.Lookup("logtostderr").Value.Set("true")
 		go_flag.Set("v", "4")
 	}
 	glog.Infof("Starting GLBC image: %v, cluster name %v", imageVersion, *clusterName)

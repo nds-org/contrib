@@ -55,9 +55,9 @@ A small amount of information about some of the individual mungers inside each o
 * comment-deleter - deletes comments created by the k8s-merge-robot which are no longer relevant. Such as comments about a rebase being required if it has been rebased.
 * comment-deleter-jenkins - deleted comments create by the k8s-bot jenkins bot which are no longer relevant. Such as old test results.
 * lgtm-after-commit - removes `lgtm` label if a PR is changed after the label was added
+* lgtm-handler - adds LGTM label if reviewer has commented "/lgtm", or remove LGTM label if reviewer has commented "/lgtm cancel"
 * needs-rebase - adds and removes a `needs-rebase` label if a PR needs to be rebased before it can be applied.
 * path-label - adds labels, such as `kind/new-api` based on if ANY file which matches changed
-* rebuild-request - Looks for requests to retest a PR but which did not reference a flake.
 * release-note-label - Manages the addition/removal of `release-note-label-required` and all of the rest of the `release-note-*` labels.
 * size - Adds the xs/s/m/l/xl labels and comments to PRs
 * stale-green-ci - Reruns the CI tests every X hours (96?) for PRs which passed. So PRs which sit around for a long time will notice failures sooner.
@@ -82,3 +82,35 @@ Sometimes we may want to run QA tests locally using the mungegithub binary. The 
     * The `--dry-run=true` flag must be specified to ensure you're not posting comments accidentally.		
     * The `--repo-dir` should be pointed to /tmp if required.		
     * The `--www=submit-queue/www/` will start up the http server if specified with the submit-queue munger, and serve on localhost:8080.
+    
+### Instructions on turning up a new submit-queue instance.
+
+The steps below make use of the utility cluster which runs the existing submit-queues.
+
+* Create a new directory for the repo on which you want to run the submit-queue instance. For example, if we want to call it `<TARGET>`, we create `contrib/submit-queue/deployments/<TARGET>`.
+* Add a service.yaml, pv.yaml, pvc.yaml, secret.yaml, configmap.yaml to the directory and configure them appropriately.
+     * The configmap’s name must be `<TARGET>-sq-flags`.
+     * The target-repo must be changed to `<TARGET>`.
+     * The PV and PVC must be named `<TARGET>-cache`.
+     * The secret must be named `<TARGET>-github-token`.
+     * The service must be named `<TARGET>-sq-status`.
+* Create a persistent disk named `<TARGET>-cache` on the utility cluster. It is typically 10G in size.
+* Switch context with kubectl to point to the utility cluster. 
+* Create the PV and PVC resources. After creation, the PV and PVC should be bound.
+* Create a new secret using the below command, which uses an API token stored in `./token`, and generates a `local.secret.yaml` file.
+```
+make secret APP=submit-queue TARGET=<TARGET>
+```
+* Load the secret created yaml using `kubectl create -f submit-queue/local.secret.yaml`.
+* Create the service which is of type NodePort.
+* Finally, update the ingress.yaml with the new URL and the new service to point to.
+* Apply changes to the running ingress instance.
+
+## Communicating with the Bot
+
+Github contributors and reviewers can communicate with the mungebot by commenting on a PR with the following commands entered alone in the text field. All commands require the following syntax: /<COMMAND> [OPTIONAL ARGS].  Note the forward slashing preceding the command name.
+
+### List of Commands
+
+1. **/lgtm** : applies the lgtm label
+2. **/lgtm cancel** : removes a previously applied lgtm label

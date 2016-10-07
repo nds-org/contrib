@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,6 +24,11 @@ import (
 	"github.com/google/go-github/github"
 )
 
+const (
+	// BotName is the name of merge-bot
+	BotName = "k8s-merge-robot"
+)
+
 // UserSet is a set a of users
 type UserSet sets.String
 
@@ -32,9 +37,10 @@ func GetUsers(users ...*github.User) UserSet {
 	allUsers := sets.String{}
 
 	for _, user := range users {
-		if user != nil && user.Login != nil {
-			allUsers.Insert(*user.Login)
+		if !IsValidUser(user) {
+			continue
 		}
+		allUsers.Insert(*user.Login)
 	}
 
 	return UserSet(allUsers)
@@ -95,4 +101,14 @@ func GetIssueUsers(issue *github.Issue) *IssueUsers {
 // AllUsers return a list of unique users (both assignees and author)
 func (u *IssueUsers) AllUsers() UserSet {
 	return u.Assignees.union(u.Author)
+}
+
+// IsValidUser returns true only if given user has valid github username.
+func IsValidUser(u *github.User) bool {
+	return u != nil && u.Login != nil
+}
+
+// IsMungeBot returns true only if given user is this bot.
+func IsMungeBot(u *github.User) bool {
+	return IsValidUser(u) && *u.Login == BotName
 }

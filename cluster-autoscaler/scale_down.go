@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 
 	"k8s.io/contrib/cluster-autoscaler/cloudprovider"
@@ -131,7 +132,7 @@ func ScaleDown(
 				glog.Errorf("Error while checking node group for %s: %v", node.Name, err)
 				continue
 			}
-			if nodeGroup == nil {
+			if nodeGroup == nil || reflect.ValueOf(nodeGroup).IsNil() {
 				glog.V(4).Infof("Skipping %s - no node group config", node.Name)
 				continue
 			}
@@ -173,7 +174,7 @@ func ScaleDown(
 	if err != nil {
 		return ScaleDownError, fmt.Errorf("failed to node group for %s: %v", nodeToRemove.Name, err)
 	}
-	if nodeGroup == nil {
+	if nodeGroup == nil || reflect.ValueOf(nodeGroup).IsNil() {
 		return ScaleDownError, fmt.Errorf("picked node that doesn't belong to a node group: %s", nodeToRemove.Name)
 	}
 

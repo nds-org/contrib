@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -87,5 +87,15 @@ func TestManagerReadConfigStringNothing(t *testing.T) {
 	exp := "10m"
 	if configNginx.SSLSessionTimeout != exp {
 		t.Errorf("Failed to set string value true actual='%s' expected='%s'", configNginx.SSLSessionTimeout, exp)
+	}
+}
+
+func TestGetDNSServers(t *testing.T) {
+	s, err := getDNSServers()
+	if err != nil {
+		t.Fatalf("unexpected error reading /etc/resolv.conf file: %v", err)
+	}
+	if len(s) < 1 {
+		t.Error("expected at least 1 nameserver in /etc/resolv.conf")
 	}
 }

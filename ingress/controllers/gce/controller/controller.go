@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -379,17 +379,18 @@ func (lbc *LoadBalancerController) updateIngressStatus(l7 *loadbalancers.L7, ing
 			},
 		},
 	}
-	lbIPs := ing.Status.LoadBalancer.Ingress
-	if len(lbIPs) == 0 && ip != "" || lbIPs[0].IP != ip {
-		// TODO: If this update fails it's probably resource version related,
-		// which means it's advantageous to retry right away vs requeuing.
-		glog.Infof("Updating loadbalancer %v/%v with IP %v", ing.Namespace, ing.Name, ip)
-		if _, err := ingClient.UpdateStatus(currIng); err != nil {
-			return err
+	if ip != "" {
+		lbIPs := ing.Status.LoadBalancer.Ingress
+		if len(lbIPs) == 0 || lbIPs[0].IP != ip {
+			// TODO: If this update fails it's probably resource version related,
+			// which means it's advantageous to retry right away vs requeuing.
+			glog.Infof("Updating loadbalancer %v/%v with IP %v", ing.Namespace, ing.Name, ip)
+			if _, err := ingClient.UpdateStatus(currIng); err != nil {
+				return err
+			}
+			lbc.recorder.Eventf(currIng, api.EventTypeNormal, "CREATE", "ip: %v", ip)
 		}
-		lbc.recorder.Eventf(currIng, api.EventTypeNormal, "CREATE", "ip: %v", ip)
 	}
-
 	// Update annotations through /update endpoint
 	currIng, err = ingClient.Get(ing.Name)
 	if err != nil {
@@ -464,7 +465,7 @@ func (lbc *LoadBalancerController) getReadyNodeNames() ([]string, error) {
 	if err != nil {
 		return nodeNames, err
 	}
-	for _, n := range nodes.Items {
+	for _, n := range nodes {
 		if n.Spec.Unschedulable {
 			continue
 		}

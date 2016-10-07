@@ -24,6 +24,7 @@ package k8s.io.kubernetes.pkg.apis.certificates.v1alpha1;
 import "k8s.io/kubernetes/pkg/api/resource/generated.proto";
 import "k8s.io/kubernetes/pkg/api/unversioned/generated.proto";
 import "k8s.io/kubernetes/pkg/api/v1/generated.proto";
+import "k8s.io/kubernetes/pkg/runtime/generated.proto";
 import "k8s.io/kubernetes/pkg/util/intstr/generated.proto";
 
 // Package-wide variables from generator "generated".
@@ -33,7 +34,7 @@ option go_package = "v1alpha1";
 message CertificateSigningRequest {
   optional k8s.io.kubernetes.pkg.api.v1.ObjectMeta metadata = 1;
 
-  // The certificate request itself and any additonal information.
+  // The certificate request itself and any additional information.
   optional CertificateSigningRequestSpec spec = 2;
 
   // Derived information about the request.

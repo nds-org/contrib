@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -141,12 +141,12 @@ func (mig *Mig) IncreaseSize(delta int) error {
 		return err
 	}
 	if int(size)+delta > mig.MaxSize() {
-		return fmt.Errorf("size increase to large - desired:%d max:%d", int(size)+delta, mig.MaxSize())
+		return fmt.Errorf("size increase too large - desired:%d max:%d", int(size)+delta, mig.MaxSize())
 	}
 	return mig.gceManager.SetMigSize(mig, size+int64(delta))
 }
 
-// Belongs retruns true if the given node belongs to the NodeGroup.
+// Belongs returns true if the given node belongs to the NodeGroup.
 func (mig *Mig) Belongs(node *kube_api.Node) (bool, error) {
 	ref, err := GceRefFromProviderId(node.Spec.ProviderID)
 	if err != nil {
@@ -181,7 +181,7 @@ func (mig *Mig) DeleteNodes(nodes []*kube_api.Node) error {
 		if err != nil {
 			return err
 		}
-		if belongs {
+		if !belongs {
 			return fmt.Errorf("%s belong to a different mig than %s", node.Name, mig.Id())
 		}
 		gceref, err := GceRefFromProviderId(node.Spec.ProviderID)
