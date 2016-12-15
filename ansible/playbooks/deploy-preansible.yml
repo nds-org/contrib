@@ -4,6 +4,6 @@
   become: yes
   roles:
     - pre-ansible
-    when: pre_ansible_done
+  when: pre_ansible_done
   tags:
     - pre-ansible
