@@ -30,10 +30,12 @@ import (
 	"k8s.io/contrib/cluster-autoscaler/config"
 	"k8s.io/contrib/cluster-autoscaler/simulator"
 	kube_util "k8s.io/contrib/cluster-autoscaler/utils/kubernetes"
-	kube_api "k8s.io/kubernetes/pkg/api"
+	apiv1 "k8s.io/kubernetes/pkg/api/v1"
+	kube_client "k8s.io/kubernetes/pkg/client/clientset_generated/release_1_5"
+	v1core "k8s.io/kubernetes/pkg/client/clientset_generated/release_1_5/typed/core/v1"
 	kube_leaderelection "k8s.io/kubernetes/pkg/client/leaderelection"
+	"k8s.io/kubernetes/pkg/client/leaderelection/resourcelock"
 	kube_record "k8s.io/kubernetes/pkg/client/record"
-	kube_client "k8s.io/kubernetes/pkg/client/unversioned"
 	kube_flag "k8s.io/kubernetes/pkg/util/flag"
 
 	"github.com/golang/glog"
@@ -55,6 +57,13 @@ func (flag *MultiStringFlag) Set(value string) error {
 	return nil
 }
 
+const (
+	//BasicEstimatorName is the name of basic estimator.
+	BasicEstimatorName = "basic"
+	// BinpackingEstimatorName is the name of binpacking estimator.
+	BinpackingEstimatorName = "binpacking"
+)
+
 var (
 	nodeGroupsFlag          MultiStringFlag
 	address                 = flag.String("address", ":8085", "The address to expose prometheus metrics.")
@@ -72,13 +81,18 @@ var (
 		"Node utilization level, defined as sum of requested resources divided by capacity, below which a node can be considered for scale down")
 	scaleDownTrialInterval = flag.Duration("scale-down-trial-interval", 1*time.Minute,
 		"How often scale down possiblity is check")
-	scanInterval  = flag.Duration("scan-interval", 10*time.Second, "How often cluster is reevaluated for scale up or down")
-	maxNodesTotal = flag.Int("max-nodes-total", 0, "Maximum number of nodes in all node groups. Cluster autoscaler will not grow the cluster beyond this number.")
+	scanInterval           = flag.Duration("scan-interval", 10*time.Second, "How often cluster is reevaluated for scale up or down")
+	maxNodesTotal          = flag.Int("max-nodes-total", 0, "Maximum number of nodes in all node groups. Cluster autoscaler will not grow the cluster beyond this number.")
+	cloudProviderFlag      = flag.String("cloud-provider", "gce", "Cloud provider type. Allowed values: gce, aws")
+	maxEmptyBulkDeleteFlag = flag.Int("max-empty-bulk-delete", 10, "Maximum number of empty nodes that can be deleted at the same time.")
 
-	cloudProviderFlag = flag.String("cloud-provider", "gce", "Cloud provider type. Allowed values: gce")
+	// AvailableEstimators is a list of available estimators.
+	AvailableEstimators = []string{BasicEstimatorName, BinpackingEstimatorName}
+	estimatorFlag       = flag.String("estimator", BinpackingEstimatorName,
+		"Type of resource estimator to be used in scale up. Available values: ["+strings.Join(AvailableEstimators, ",")+"]")
 )
 
-func createKubeClient() *kube_client.Client {
+func createKubeClient() kube_client.Interface {
 	url, err := url.Parse(*kubernetes)
 	if err != nil {
 		glog.Fatalf("Failed to parse Kuberentes url: %v", err)
@@ -89,14 +103,14 @@ func createKubeClient() *kube_client.Client {
 		glog.Fatalf("Failed to build Kuberentes client configuration: %v", err)
 	}
 
-	return kube_client.NewOrDie(kubeConfig)
+	return kube_client.NewForConfigOrDie(kubeConfig)
 }
 
-func createEventRecorder(kubeClient *kube_client.Client) kube_record.EventRecorder {
+func createEventRecorder(kubeClient kube_client.Interface) kube_record.EventRecorder {
 	eventBroadcaster := kube_record.NewBroadcaster()
 	eventBroadcaster.StartLogging(glog.Infof)
-	eventBroadcaster.StartRecordingToSink(kubeClient.Events(""))
-	return eventBroadcaster.NewRecorder(kube_api.EventSource{Component: "cluster-autoscaler"})
+	eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: kubeClient.Core().Events("")})
+	return eventBroadcaster.NewRecorder(apiv1.EventSource{Component: "cluster-autoscaler"})
 }
 
 // In order to meet interface criteria for LeaderElectionConfig we need to
@@ -109,7 +123,7 @@ func run(_ <-chan struct{}) {
 	if err != nil {
 		glog.Fatalf("Failed to create predicate checker: %v", err)
 	}
-	unschedulablePodLister := kube_util.NewUnschedulablePodLister(kubeClient, kube_api.NamespaceAll)
+	unschedulablePodLister := kube_util.NewUnschedulablePodLister(kubeClient, apiv1.NamespaceAll)
 	scheduledPodLister := kube_util.NewScheduledPodLister(kubeClient)
 	nodeLister := kube_util.NewNodeLister(kubeClient)
 
@@ -117,6 +131,7 @@ func run(_ <-chan struct{}) {
 	lastScaleDownFailedTrial := time.Now()
 	unneededNodes := make(map[string]time.Time)
 	podLocationHints := make(map[string]string)
+	nodeUtilizationMap := make(map[string]float64)
 	usageTracker := simulator.NewUsageTracker()
 
 	recorder := createEventRecorder(kubeClient)
@@ -241,7 +256,7 @@ func run(_ <-chan struct{}) {
 					scaleUpStart := time.Now()
 					updateLastTime("scaleup")
 					scaledUp, err := ScaleUp(unschedulablePodsToHelp, nodes, cloudProvider, kubeClient, predicateChecker, recorder,
-						*maxNodesTotal)
+						*maxNodesTotal, *estimatorFlag)
 
 					updateDuration("scaleup", scaleUpStart)
 
@@ -270,10 +285,10 @@ func run(_ <-chan struct{}) {
 						lastScaleUpTime, lastScaleDownFailedTrial, schedulablePodsPresent)
 
 					updateLastTime("findUnneeded")
-					glog.V(4).Infof("Calculating unneded nodes")
+					glog.V(4).Infof("Calculating unneeded nodes")
 
 					usageTracker.CleanUp(time.Now().Add(-(*scaleDownUnneededTime)))
-					unneededNodes, podLocationHints = FindUnneededNodes(
+					unneededNodes, podLocationHints, nodeUtilizationMap = FindUnneededNodes(
 						nodes,
 						unneededNodes,
 						*scaleDownUtilizationThreshold,
@@ -298,6 +313,7 @@ func run(_ <-chan struct{}) {
 
 						result, err := ScaleDown(
 							nodes,
+							nodeUtilizationMap,
 							unneededNodes,
 							*scaleDownUnneededTime,
 							allScheduled,
@@ -305,7 +321,9 @@ func run(_ <-chan struct{}) {
 							kubeClient,
 							predicateChecker,
 							podLocationHints,
-							usageTracker)
+							usageTracker,
+							recorder,
+							*maxEmptyBulkDeleteFlag)
 
 						updateDuration("scaledown", scaleDownStart)
 
@@ -336,6 +354,16 @@ func main() {
 
 	glog.Infof("Cluster Autoscaler %s", ClusterAutoscalerVersion)
 
+	correctEstimator := false
+	for _, availableEstimator := range AvailableEstimators {
+		if *estimatorFlag == availableEstimator {
+			correctEstimator = true
+		}
+	}
+	if !correctEstimator {
+		glog.Fatalf("Unrecognized estimator: %v", *estimatorFlag)
+	}
+
 	go func() {
 		http.Handle("/metrics", prometheus.Handler())
 		err := http.ListenAndServe(*address, nil)
@@ -352,13 +380,17 @@ func main() {
 
 		kubeClient := createKubeClient()
 		kube_leaderelection.RunOrDie(kube_leaderelection.LeaderElectionConfig{
-			EndpointsMeta: kube_api.ObjectMeta{
-				Namespace: "kube-system",
-				Name:      "cluster-autoscaler",
+			Lock: &resourcelock.EndpointsLock{
+				EndpointsMeta: apiv1.ObjectMeta{
+					Namespace: "kube-system",
+					Name:      "cluster-autoscaler",
+				},
+				Client: kubeClient,
+				LockConfig: resourcelock.ResourceLockConfig{
+					Identity:      id,
+					EventRecorder: createEventRecorder(kubeClient),
+				},
 			},
-			Client:        kubeClient,
-			Identity:      id,
-			EventRecorder: createEventRecorder(kubeClient),
 			LeaseDuration: leaderElection.LeaseDuration.Duration,
 			RenewDeadline: leaderElection.RenewDeadline.Duration,
 			RetryPeriod:   leaderElection.RetryPeriod.Duration,
