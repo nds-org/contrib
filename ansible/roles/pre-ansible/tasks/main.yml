@@ -40,3 +40,7 @@
 
 - include: fedora-dnf.yml
   when: os_version.stdout|int >= 22 and 'Fedora' in distro.stdout and is_atomic is not defined
+
+- name: set pre-ansible installed
+  set_fact:
+    pre_ansible_installed: true
