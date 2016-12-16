@@ -24,7 +24,7 @@
   when: is_coreos
 
 - include: coreos.yml
-  when: is_coreos
+  when: is_coreos and not pre_ansible_installed
 
 - name: Determine if Atomic
   raw: "test -f /run/ostree-booted"
