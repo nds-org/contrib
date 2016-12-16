@@ -23,8 +23,13 @@
     bin_dir: "/opt/bin"
   when: is_coreos
 
+- name: Set the bin directory path for CoreOS
+  raw: "[[ -f /opt/bin/python/.bootstrapped ]]"
+  register: bs
+  when: is_coreos and rc.
+
 - include: coreos.yml
-  when: is_coreos and not pre_ansible_installed
+  when: is_coreos and bs.rc == 0
 
 - name: Determine if Atomic
   raw: "test -f /run/ostree-booted"
@@ -40,7 +45,3 @@
 
 - include: fedora-dnf.yml
   when: os_version.stdout|int >= 22 and 'Fedora' in distro.stdout and is_atomic is not defined
-
-- name: set pre-ansible installed
-  set_fact:
-    pre_ansible_installed: true
