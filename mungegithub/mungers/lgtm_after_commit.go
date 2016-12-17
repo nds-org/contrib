@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import (
 
 	"k8s.io/contrib/mungegithub/features"
 	"k8s.io/contrib/mungegithub/github"
+	"k8s.io/contrib/mungegithub/mungers/mungerutil"
 
 	"github.com/golang/glog"
 	githubapi "github.com/google/go-github/github"
@@ -29,11 +30,11 @@ import (
 )
 
 const (
-	lgtmRemovedBody = "PR changed after LGTM, removing LGTM. %s"
+	lgtmRemovedBody = "/lgtm cancel //PR changed after LGTM, removing LGTM. %s"
 )
 
 var (
-	lgtmRemovedRegex = regexp.MustCompile("PR changed after LGTM, removing LGTM.")
+	lgtmRemovedRegex = regexp.MustCompile("/lgtm cancel //PR changed after LGTM, removing LGTM.")
 )
 
 // LGTMAfterCommitMunger will remove the LGTM flag from an PR which has been
@@ -83,7 +84,7 @@ func (LGTMAfterCommitMunger) Munge(obj *github.MungeObject) {
 
 	if lastModified.After(*lgtmTime) {
 		glog.Infof("PR: %d lgtm:%s  lastModified:%s", *obj.Issue.Number, lgtmTime.String(), lastModified.String())
-		body := fmt.Sprintf(lgtmRemovedBody, mentionUsers(getInvolvedUsers(obj)))
+		body := fmt.Sprintf(lgtmRemovedBody, mungerutil.GetIssueUsers(obj.Issue).AllUsers().Mention().Join())
 		if err := obj.WriteComment(body); err != nil {
 			return
 		}
@@ -98,10 +99,10 @@ func (LGTMAfterCommitMunger) isStaleComment(obj *github.MungeObject, comment *gi
 	if !lgtmRemovedRegex.MatchString(*comment.Body) {
 		return false
 	}
-	if !obj.HasLabel("lgtm") {
+	if !obj.HasLabel(lgtmLabel) {
 		return false
 	}
-	lgtmTime := obj.LabelTime("lgtm")
+	lgtmTime := obj.LabelTime(lgtmLabel)
 	if lgtmTime == nil {
 		return false
 	}

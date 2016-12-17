@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -95,4 +95,53 @@ func TestAnnotations(t *testing.T) {
 	if len(wl) != 2 {
 		t.Errorf("Expected 2 netwotks but %v was returned", len(wl))
 	}
+}
+
+func TestParseAnnotations(t *testing.T) {
+	ing := buildIngress()
+
+	_, err := ingAnnotations(ing.GetAnnotations()).whitelist()
+	if err == nil {
+		t.Error("Expected a validation error")
+	}
+
+	testNet := "10.0.0.0/24"
+	enet := []string{testNet}
+
+	data := map[string]string{}
+	data[whitelist] = testNet
+	ing.SetAnnotations(data)
+
+	expected := &SourceRange{
+		CIDR: enet,
+	}
+
+	sr, err := ParseAnnotations([]string{}, ing)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	if !reflect.DeepEqual(sr, expected) {
+		t.Errorf("Expected %v but returned %s", sr, expected)
+	}
+
+	data[whitelist] = "www"
+	ing.SetAnnotations(data)
+	_, err = ParseAnnotations([]string{}, ing)
+	if err == nil {
+		t.Errorf("Expected error parsing an invalid cidr")
+	}
+
+	delete(data, "whitelist")
+	ing.SetAnnotations(data)
+	sr, _ = ParseAnnotations([]string{}, ing)
+	if !reflect.DeepEqual(sr.CIDR, []string{}) {
+		t.Errorf("Expected empty CIDR but %v returned", sr.CIDR)
+	}
+
+	sr, _ = ParseAnnotations([]string{}, &extensions.Ingress{})
+	if !reflect.DeepEqual(sr.CIDR, []string{}) {
+		t.Errorf("Expected empty CIDR but %v returned", sr.CIDR)
+	}
+
 }

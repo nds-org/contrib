@@ -1,0 +1,9 @@
+---
+- hosts: all
+  gather_facts: false
+  become: yes
+  roles:
+    - pre-ansible
+  when: pre_ansible_done
+  tags:
+    - pre-ansible

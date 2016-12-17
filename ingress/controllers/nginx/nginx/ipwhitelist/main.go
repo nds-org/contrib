@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -46,18 +46,18 @@ type SourceRange struct {
 type ingAnnotations map[string]string
 
 func (a ingAnnotations) whitelist() ([]string, error) {
+	cidrs := make([]string, 0)
 	val, ok := a[whitelist]
 	if !ok {
-		return nil, ErrMissingWhitelist
+		return cidrs, ErrMissingWhitelist
 	}
 
 	values := strings.Split(val, ",")
 	ipnets, err := sets.ParseIPNets(values...)
 	if err != nil {
-		return nil, ErrInvalidCIDR
+		return cidrs, ErrInvalidCIDR
 	}
 
-	cidrs := make([]string, 0)
 	for k := range ipnets {
 		cidrs = append(cidrs, k)
 	}

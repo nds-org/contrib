@@ -15,6 +15,7 @@ spec:
         command:
         - /mungegithub
         - --dry-run=true
+        - --stderrthreshold=INFO
         - --http-cache-dir=$(HTTP_CACHE_DIR)
         - --organization=$(ORGANIZATION)
         - --project=$(PROJECT)
@@ -43,6 +44,12 @@ spec:
         - --generated-files-config=$(GENERATED_FILES_CONFIG)
         - --chart-url=$(CHART_URL)
         - --history-url=$(HISTORY_URL)
+        - --enable-md-yaml=$(ENABLE_MD_YAML)
+        - --label-file=$(LABEL_FILE)
+        - --triager-url=$(TRIAGER_URL)
+        - --cla-status-context=$(CLA_STATUS_CONTEXT)
+        - --alias-file=$(ALIAS_FILE_PATH)
+        - --batch-url=$(BATCH_URL)
         image: gcr.io/google_containers/submit-queue:2016-05-24-86f86cd
         env:
           - name: HTTP_CACHE_DIR
@@ -115,6 +122,11 @@ spec:
               configMapKeyRef:
                 name: @@-sq-config
                 key: submit-queue.admin-port
+          - name: BATCH_URL
+            valueFrom:
+              configMapKeyRef:
+                name: @@-sq-config
+                key: submit-queue.batch-url
           - name: GCS_BUCKET
             valueFrom:
               configMapKeyRef:
@@ -150,6 +162,11 @@ spec:
               configMapKeyRef:
                 name: @@-sq-config
                 key: gitrepo.repo-dir
+          - name: ENABLE_MD_YAML
+            valueFrom:
+              configMapKeyRef:
+                name: @@-sq-config
+                key: gitrepo.enable-md-yaml
           - name: TEST_OWNERS_CSV
             valueFrom:
               configMapKeyRef:
@@ -185,6 +202,26 @@ spec:
               configMapKeyRef:
                 name: @@-sq-config
                 key: submit-queue.history-url
+          - name: LABEL_FILE
+            valueFrom:
+              configMapKeyRef:
+                name: @@-sq-config
+                key: check-labels.label-file
+          - name: TRIAGER_URL
+            valueFrom:
+              configMapKeyRef:
+                name: @@-sq-config
+                key: issue-categorizer.triager-url
+          - name: CLA_STATUS_CONTEXT
+            valueFrom:
+              configMapKeyRef:
+                name: @@-sq-config
+                key: cla.cla-status-context
+          - name: ALIAS_FILE_PATH
+            valueFrom:
+              configMapKeyRef:
+                name: @@-sq-config
+                key: alias.alias-file
         ports:
         - name: status
           containerPort: 8080

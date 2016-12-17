@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ const (
 )
 
 var (
-	ignoreFilesRegex = regexp.MustCompile(".*\\.md$")
+	ignoreFilesRegex = regexp.MustCompile(".*\\.(md|png|svg|dia)$")
 )
 
 // DocsNeedNoRetest automatically labels documentation only pull-requests as retest-not-required
@@ -40,7 +40,6 @@ type DocsNeedNoRetest struct{}
 func init() {
 	munger := &DocsNeedNoRetest{}
 	RegisterMungerOrDie(munger)
-	RegisterStaleComments(munger)
 }
 
 // Name is the name usable in --pr-mungers
@@ -88,9 +87,4 @@ func (DocsNeedNoRetest) Munge(obj *github.MungeObject) {
 	} else if !docsOnly && obj.HasLabel(labelSkipRetest) {
 		obj.RemoveLabel(labelSkipRetest)
 	}
-}
-
-// StaleComments returns a slice of stale comments
-func (s *DocsNeedNoRetest) StaleComments(obj *github.MungeObject, comments []*githubapi.IssueComment) []*githubapi.IssueComment {
-	return nil
 }

@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -291,7 +291,10 @@ func (lbc *LoadBalancerController) sync(key string) (err error) {
 	}
 	nodePorts := lbc.tr.toNodePorts(&paths)
 	lbNames := lbc.ingLister.Store.ListKeys()
-	lbs, _ := lbc.ListRuntimeInfo()
+	lbs, err := lbc.ListRuntimeInfo()
+	if err != nil {
+		return err
+	}
 	nodeNames, err := lbc.getReadyNodeNames()
 	if err != nil {
 		return err
@@ -376,17 +379,18 @@ func (lbc *LoadBalancerController) updateIngressStatus(l7 *loadbalancers.L7, ing
 			},
 		},
 	}
-	lbIPs := ing.Status.LoadBalancer.Ingress
-	if len(lbIPs) == 0 && ip != "" || lbIPs[0].IP != ip {
-		// TODO: If this update fails it's probably resource version related,
-		// which means it's advantageous to retry right away vs requeuing.
-		glog.Infof("Updating loadbalancer %v/%v with IP %v", ing.Namespace, ing.Name, ip)
-		if _, err := ingClient.UpdateStatus(currIng); err != nil {
-			return err
+	if ip != "" {
+		lbIPs := ing.Status.LoadBalancer.Ingress
+		if len(lbIPs) == 0 || lbIPs[0].IP != ip {
+			// TODO: If this update fails it's probably resource version related,
+			// which means it's advantageous to retry right away vs requeuing.
+			glog.Infof("Updating loadbalancer %v/%v with IP %v", ing.Namespace, ing.Name, ip)
+			if _, err := ingClient.UpdateStatus(currIng); err != nil {
+				return err
+			}
+			lbc.recorder.Eventf(currIng, api.EventTypeNormal, "CREATE", "ip: %v", ip)
 		}
-		lbc.recorder.Eventf(currIng, api.EventTypeNormal, "CREATE", "ip: %v", ip)
 	}
-
 	// Update annotations through /update endpoint
 	currIng, err = ingClient.Get(ing.Name)
 	if err != nil {
@@ -404,14 +408,17 @@ func (lbc *LoadBalancerController) updateIngressStatus(l7 *loadbalancers.L7, ing
 
 // ListRuntimeInfo lists L7RuntimeInfo as understood by the loadbalancer module.
 func (lbc *LoadBalancerController) ListRuntimeInfo() (lbs []*loadbalancers.L7RuntimeInfo, err error) {
-	for _, m := range lbc.ingLister.Store.List() {
-		ing := m.(*extensions.Ingress)
-		k, err := keyFunc(ing)
+	ingList, err := lbc.ingLister.List()
+	if err != nil {
+		return lbs, err
+	}
+	for _, ing := range ingList.Items {
+		k, err := keyFunc(&ing)
 		if err != nil {
 			glog.Warningf("Cannot get key for Ingress %v/%v: %v", ing.Namespace, ing.Name, err)
 			continue
 		}
-		tls, err := lbc.tlsLoader.load(ing)
+		tls, err := lbc.tlsLoader.load(&ing)
 		if err != nil {
 			glog.Warningf("Cannot get certs for Ingress %v/%v: %v", ing.Namespace, ing.Name, err)
 		}
@@ -458,7 +465,7 @@ func (lbc *LoadBalancerController) getReadyNodeNames() ([]string, error) {
 	if err != nil {
 		return nodeNames, err
 	}
-	for _, n := range nodes.Items {
+	for _, n := range nodes {
 		if n.Spec.Unschedulable {
 			continue
 		}

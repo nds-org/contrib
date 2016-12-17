@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,16 +18,19 @@ package features
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"k8s.io/contrib/mungegithub/github"
 	"k8s.io/kubernetes/pkg/util/sets"
 	"k8s.io/kubernetes/pkg/util/yaml"
 
+	parseYaml "github.com/ghodss/yaml"
 	"github.com/golang/glog"
 	"github.com/spf13/cobra"
 )
@@ -40,14 +43,18 @@ const (
 
 type assignmentConfig struct {
 	Assignees []string `json:assignees yaml:assignees`
+	Approvers []string `json:approvers yaml:approvers`
+	//Reviewers []string `json:reviewers yaml:reviewers`
 	//Owners []string `json:owners`
 }
 
 // RepoInfo provides information about users in OWNERS files in a git repo
 type RepoInfo struct {
+	BaseDir      string
+	EnableMdYaml bool
+
 	enabled    bool
 	projectDir string
-	baseDir    string
 	assignees  map[string]sets.String
 	config     *github.Config
 	//owners   map[string]sets.String
@@ -79,6 +86,35 @@ func (o *RepoInfo) walkFunc(path string, info os.FileInfo, err error) error {
 	if !info.Mode().IsRegular() {
 		return nil
 	}
+
+	c := &assignmentConfig{}
+
+	// '.md' files may contain assignees at the top of the file in a yaml header
+	// Flag guarded because this is only enabled in some repos
+	if o.EnableMdYaml && filename != ownerFilename && strings.HasSuffix(filename, "md") {
+		// Parse the yaml header from the file if it exists and marshal into the config
+		if err := decodeAssignmentConfig(path, c); err != nil {
+			glog.Errorf("%v", err)
+			return err
+		}
+
+		// Set assignees for this file using the relative path if they were found
+		path, err = filepath.Rel(o.projectDir, path)
+		if err != nil {
+			glog.Errorf("Unable to find relative path between %q and %q: %v", o.projectDir, path, err)
+			return err
+		}
+		o.assignees[path] = sets.NewString()
+		if len(c.Assignees) > 0 {
+			o.assignees[path] = o.assignees[path].Union(sets.NewString(c.Assignees...))
+		}
+		if len(c.Approvers) > 0 {
+			o.assignees[path] = o.assignees[path].Union(sets.NewString(c.Approvers...))
+		}
+
+		return nil
+	}
+
 	if filename != ownerFilename {
 		return nil
 	}
@@ -90,7 +126,6 @@ func (o *RepoInfo) walkFunc(path string, info os.FileInfo, err error) error {
 	}
 	defer file.Close()
 
-	c := &assignmentConfig{}
 	if err := yaml.NewYAMLToJSONDecoder(file).Decode(c); err != nil {
 		glog.Errorf("%v", err)
 		return nil
@@ -102,13 +137,37 @@ func (o *RepoInfo) walkFunc(path string, info os.FileInfo, err error) error {
 		return err
 	}
 	path = filepath.Dir(path)
+	// Make the root explicitly / so its easy to distinguish. Nothing else is `/` anchored
+	if path == "." {
+		path = "/"
+	}
+	o.assignees[path] = sets.NewString()
 	if len(c.Assignees) > 0 {
-		o.assignees[path] = sets.NewString(c.Assignees...)
+		o.assignees[path] = o.assignees[path].Union(sets.NewString(c.Assignees...))
+	} else if len(c.Approvers) > 0 {
+		o.assignees[path] = o.assignees[path].Union(sets.NewString(c.Approvers...))
 	}
 	//if len(c.Owners) > 0 {
 	//o.owners[path] = sets.NewString(c.Owners...)
 	//}
 	return nil
+}
+
+// decodeAssignmentConfig will parse the yaml header if it exists and unmarshal it into an assignmentConfig.
+// If no yaml header is found, do nothing
+// Returns an error if the file cannot be read or the yaml header is found but cannot be unmarshalled
+var mdStructuredHeaderRegex = regexp.MustCompile("^---\n(.|\n)*\n---")
+
+func decodeAssignmentConfig(path string, config *assignmentConfig) error {
+	fileBytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	// Parse the yaml header from the top of the file.  Will return an empty string if regex does not match.
+	meta := mdStructuredHeaderRegex.FindString(string(fileBytes))
+
+	// Unmarshal the yaml header into the config
+	return parseYaml.Unmarshal([]byte(meta), &config)
 }
 
 func (o *RepoInfo) updateRepoUsers() error {
@@ -139,16 +198,14 @@ func (o *RepoInfo) updateRepoUsers() error {
 
 // Initialize will initialize the munger
 func (o *RepoInfo) Initialize(config *github.Config) error {
-	glog.Infof("repo-dir: %#v\n", o.baseDir)
-
 	o.enabled = true
 	o.config = config
-	o.projectDir = path.Join(o.baseDir, o.config.Project)
+	o.projectDir = path.Join(o.BaseDir, o.config.Project)
 
-	if len(o.baseDir) == 0 {
+	if len(o.BaseDir) == 0 {
 		glog.Fatalf("--repo-dir is required with selected munger(s)")
 	}
-	finfo, err := os.Stat(o.baseDir)
+	finfo, err := os.Stat(o.BaseDir)
 	if err != nil {
 		return fmt.Errorf("Unable to stat --repo-dir: %v", err)
 	}
@@ -170,13 +227,15 @@ func (o *RepoInfo) Initialize(config *github.Config) error {
 }
 
 func (o *RepoInfo) cleanUp(path string) error {
-	err := os.RemoveAll(path)
-	return err
+	return os.RemoveAll(path)
 }
 
 func (o *RepoInfo) cloneRepo() (string, error) {
 	cloneUrl := fmt.Sprintf("https://github.com/%s/%s.git", o.config.Org, o.config.Project)
-	_, err := o.gitCommandDir([]string{"clone", cloneUrl, o.projectDir}, o.baseDir)
+	output, err := o.gitCommandDir([]string{"clone", cloneUrl, o.projectDir}, o.BaseDir)
+	if err != nil {
+		glog.Errorf("Failed to clone github repo: %s", output)
+	}
 	return cloneUrl, err
 }
 
@@ -194,7 +253,8 @@ func (o *RepoInfo) EachLoop() error {
 
 // AddFlags will add any request flags to the cobra `cmd`
 func (o *RepoInfo) AddFlags(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&o.baseDir, "repo-dir", "", "Path to perform checkout of repository")
+	cmd.Flags().StringVar(&o.BaseDir, "repo-dir", "", "Path to perform checkout of repository")
+	cmd.Flags().BoolVar(&o.EnableMdYaml, "enable-md-yaml", false, "If true, look for assignees in md yaml headers.")
 }
 
 // GitCommand will execute the git command with the `args` within the project directory.
@@ -209,18 +269,26 @@ func (o *RepoInfo) gitCommandDir(args []string, cmdDir string) ([]byte, error) {
 	return cmd.CombinedOutput()
 }
 
-func peopleForPath(path string, people map[string]sets.String, leafOnly bool) sets.String {
-	d := filepath.Dir(path)
+func peopleForPath(path string, people map[string]sets.String, leafOnly bool, enableMdYaml bool) sets.String {
+	d := path
+	if !enableMdYaml {
+		d = filepath.Dir(path)
+	}
+
 	out := sets.NewString()
 	for {
+		// special case the root
+		if d == "" {
+			d = "/"
+		}
 		s, ok := people[d]
 		if ok {
 			out = out.Union(s)
-			if leafOnly {
+			if leafOnly && out.Len() > 0 {
 				break
 			}
 		}
-		if d == "" {
+		if d == "/" {
 			break
 		}
 		d, _ = filepath.Split(d)
@@ -229,18 +297,18 @@ func peopleForPath(path string, people map[string]sets.String, leafOnly bool) se
 	return out
 }
 
-// LeafAssignees returns a set of users who are the closest assginees to the
+// LeafAssignees returns a set of users who are the closest assignees to the
 // requested file. If pkg/OWNERS has user1 and pkg/util/OWNERS has user2 this
 // will only return user2 for the path pkg/util/sets/file.go
 func (o *RepoInfo) LeafAssignees(path string) sets.String {
-	return peopleForPath(path, o.assignees, true)
+	return peopleForPath(path, o.assignees, true, o.EnableMdYaml)
 }
 
-// Assignees returns a set of users who are the closest assginees to the
+// Assignees returns a set of all users who are assignees to the
 // requested file. If pkg/OWNERS has user1 and pkg/util/OWNERS has user2 this
 // will return both user1 and user2 for the path pkg/util/sets/file.go
 func (o *RepoInfo) Assignees(path string) sets.String {
-	return peopleForPath(path, o.assignees, false)
+	return peopleForPath(path, o.assignees, false, o.EnableMdYaml)
 }
 
 //func (o *RepoInfo) LeafOwners(path string) sets.String {

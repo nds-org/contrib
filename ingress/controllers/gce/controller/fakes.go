@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ func NewFakeClusterManager(clusterName string) *fakeClusterManager {
 	fakeBackends := backends.NewFakeBackendServices()
 	fakeIGs := instances.NewFakeInstanceGroups(sets.NewString())
 	fakeHCs := healthchecks.NewFakeHealthChecks()
-	namer := &utils.Namer{clusterName}
+	namer := utils.NewNamer(clusterName)
 
 	nodePool := instances.NewNodePool(fakeIGs)
 	nodePool.Init(&instances.FakeZoneLister{[]string{"zone-a"}})

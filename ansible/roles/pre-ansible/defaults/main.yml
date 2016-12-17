@@ -9,3 +9,5 @@ pypy_version: 2.4.0
 
 pypy_download_url_base: "https://bitbucket.org/pypy/pypy/downloads"
 pypy_download_url: "{{ pypy_download_url_base }}/pypy-{{ pypy_version }}-linux64.tar.bz2"
+
+pre_ansible_installed: false

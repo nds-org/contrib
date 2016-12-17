@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -126,5 +126,8 @@ func (s *StalePendingCI) isStaleComment(obj *github.MungeObject, comment *github
 
 // StaleComments returns a slice of stale comments
 func (s *StalePendingCI) StaleComments(obj *github.MungeObject, comments []*githubapi.IssueComment) []*githubapi.IssueComment {
+	if s.features == nil {
+		return nil // munger not initialized, cannot clean stale comments
+	}
 	return forEachCommentTest(obj, comments, s.isStaleComment)
 }

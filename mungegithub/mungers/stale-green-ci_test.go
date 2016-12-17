@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -94,7 +94,7 @@ func TestOldUnitTestMunge(t *testing.T) {
 		issue.Number = intPtr(issueNum)
 		pr := ValidPR()
 		pr.Number = intPtr(issueNum)
-		client, server, mux := github_test.InitServer(t, issue, pr, nil, nil, test.ciStatus, nil)
+		client, server, mux := github_test.InitServer(t, issue, pr, nil, nil, test.ciStatus, nil, nil)
 
 		path := fmt.Sprintf("/repos/o/r/issues/%d/comments", issueNum)
 		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {

@@ -23,8 +23,13 @@
     bin_dir: "/opt/bin"
   when: is_coreos
 
-- include: coreos.yml
+- name: Set the bin directory path for CoreOS
+  raw: "[[ -f /opt/bin/python/.bootstrapped ]]"
+  register: bs
   when: is_coreos
+
+- include: coreos.yml
+  when: is_coreos and bs.rc == 0
 
 - name: Determine if Atomic
   raw: "test -f /run/ostree-booted"

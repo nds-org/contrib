@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -87,7 +87,8 @@ func ProcessSingleTest(scanner *bufio.Scanner, buildNumber int) (map[string]*e2e
 			buff.Reset()
 		}
 		if state != defaultState {
-			buff.WriteString(line + " ")
+			dataStartIndex := strings.Index(line, "]")
+			buff.WriteString(line[dataStartIndex+1:] + " ")
 		}
 		if strings.Contains(line, "LogsSizeDataSummary JSON") {
 			state = readingLogs

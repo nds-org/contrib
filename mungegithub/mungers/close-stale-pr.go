@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,11 +19,11 @@ package mungers
 import (
 	"fmt"
 	"regexp"
-	"strings"
 	"time"
 
 	"k8s.io/contrib/mungegithub/features"
 	"k8s.io/contrib/mungegithub/github"
+	"k8s.io/contrib/mungegithub/mungers/mungerutil"
 
 	"github.com/golang/glog"
 	githubapi "github.com/google/go-github/github"
@@ -48,7 +48,7 @@ You can add 'keep-open' label to prevent this from happening, or add a comment t
 
 var (
 	closingCommentRE = regexp.MustCompile(`This PR hasn't been active in \d+ days?\..*label to prevent this from happening again`)
-	warningCommentRE = regexp.MustCompile(`This PR hasn't been active in \d+ days?\..*be closed in \d+ days`)
+	warningCommentRE = regexp.MustCompile(`This PR hasn't been active in \d+ days?\..*be closed in \d+ days?`)
 )
 
 // CloseStalePR will ask the Bot to close any PullRequest that didn't
@@ -180,12 +180,14 @@ func findLastModificationTime(obj *github.MungeObject) (*time.Time, error) {
 	return lastModif, nil
 }
 
-func findLatestWarningComment(obj *github.MungeObject) *githubapi.IssueComment {
+// Find the last warning comment that the bot has posted.
+// It can return an empty comment if it fails to find one, even if there are no errors.
+func findLatestWarningComment(obj *github.MungeObject) (*githubapi.IssueComment, error) {
 	var lastFoundComment *githubapi.IssueComment
 
 	comments, err := obj.ListComments()
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	for i := range comments {
@@ -209,7 +211,7 @@ func findLatestWarningComment(obj *github.MungeObject) *githubapi.IssueComment {
 		}
 	}
 
-	return lastFoundComment
+	return lastFoundComment, nil
 }
 
 func durationToDays(duration time.Duration) string {
@@ -222,12 +224,16 @@ func durationToDays(duration time.Duration) string {
 }
 
 func closePullRequest(obj *github.MungeObject, inactiveFor time.Duration) {
-	mention := mentionUsers(getInvolvedUsers(obj))
+	mention := mungerutil.GetIssueUsers(obj.Issue).AllUsers().Mention().Join()
 	if mention != "" {
 		mention = "cc " + mention + "\n"
 	}
 
-	comment := findLatestWarningComment(obj)
+	comment, err := findLatestWarningComment(obj)
+	if err != nil {
+		glog.Error("Failed to findLatestWarningComment: ", err)
+		return
+	}
 	if comment != nil {
 		obj.DeleteComment(comment)
 	}
@@ -236,36 +242,8 @@ func closePullRequest(obj *github.MungeObject, inactiveFor time.Duration) {
 	obj.ClosePR()
 }
 
-func getInvolvedUsers(obj *github.MungeObject) []string {
-	var users []string
-
-	var user string
-	if obj.Issue.User != nil && obj.Issue.User.Login != nil {
-		user = *obj.Issue.User.Login
-		users = append(users, user)
-	}
-
-	for _, assignee := range obj.Issue.Assignees {
-		if assignee.Login == nil || *assignee.Login == user {
-			continue
-		}
-		users = append(users, *assignee.Login)
-	}
-
-	return users
-}
-
-func mentionUsers(users []string) string {
-	var mentions []string
-	for _, user := range users {
-		mentions = append(mentions, "@"+user)
-	}
-
-	return strings.Join(mentions, " ")
-}
-
 func postWarningComment(obj *github.MungeObject, inactiveFor time.Duration, closeIn time.Duration) {
-	mention := mentionUsers(getInvolvedUsers(obj))
+	mention := mungerutil.GetIssueUsers(obj.Issue).AllUsers().Mention().Join()
 	if mention != "" {
 		mention = "cc " + mention + "\n"
 	}
@@ -286,7 +264,11 @@ func checkAndWarn(obj *github.MungeObject, inactiveFor time.Duration, closeIn ti
 		// We are going to close the PR in less than a day. Too late to warn
 		return
 	}
-	comment := findLatestWarningComment(obj)
+	comment, err := findLatestWarningComment(obj)
+	if err != nil {
+		glog.Error("Failed to findLatestWarningComment: ", err)
+		return
+	}
 	if comment == nil {
 		// We don't already have the comment. Post it
 		postWarningComment(obj, inactiveFor, closeIn)
@@ -323,7 +305,8 @@ func (CloseStalePR) Munge(obj *github.MungeObject) {
 		checkAndWarn(obj, inactiveFor, closeIn)
 	} else {
 		// Pull-request is active. Remove previous potential warning
-		comment := findLatestWarningComment(obj)
+		// Ignore potential errors, we just want to remove old comments ...
+		comment, _ := findLatestWarningComment(obj)
 		if comment != nil {
 			obj.DeleteComment(comment)
 		}

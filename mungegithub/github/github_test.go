@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,7 +29,6 @@ import (
 	"github.com/google/go-github/github"
 )
 
-func stringPtr(val string) *string     { return &val }
 func timePtr(val time.Time) *time.Time { return &val }
 func intPtr(val int) *int              { return &val }
 
@@ -181,7 +180,7 @@ func TestForEachIssueDo(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		client, server, mux := github_test.InitServer(t, nil, nil, nil, nil, nil, nil)
+		client, server, mux := github_test.InitServer(t, nil, nil, nil, nil, nil, nil, nil)
 		config := &Config{
 			client:      client,
 			Org:         "foo",
@@ -404,7 +403,7 @@ func TestGetLastModified(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		client, server, _ := github_test.InitServer(t, nil, nil, nil, test.commits, nil, nil)
+		client, server, _ := github_test.InitServer(t, nil, nil, nil, test.commits, nil, nil, nil)
 		config := &Config{}
 		config.Org = "o"
 		config.Project = "r"
@@ -450,7 +449,7 @@ func TestRemoveLabel(t *testing.T) {
 		},
 	}
 	for testNum, test := range tests {
-		client, server, mux := github_test.InitServer(t, test.issue, nil, nil, nil, nil, nil)
+		client, server, mux := github_test.InitServer(t, test.issue, nil, nil, nil, nil, nil, nil)
 		config := &Config{}
 		config.Org = "o"
 		config.Project = "r"
@@ -511,7 +510,7 @@ this pr Fixes #23 and FIXES #45 but not fixxx #99`,
 		},
 	}
 	for testNum, test := range tests {
-		client, server, _ := github_test.InitServer(t, test.issue, nil, nil, nil, nil, nil)
+		client, server, _ := github_test.InitServer(t, test.issue, nil, nil, nil, nil, nil, nil)
 		config := &Config{}
 		config.Org = "o"
 		config.Project = "r"
@@ -533,5 +532,69 @@ this pr Fixes #23 and FIXES #45 but not fixxx #99`,
 			}
 		}
 		server.Close()
+	}
+}
+
+func TestCleanIssueBody(t *testing.T) {
+	tests := []struct {
+		body, expected string
+	}{
+		{"foo", "foo"},
+		{"    bar   ", "bar"},
+		{
+			`Some message
+
+<!-- Reviewable:start -->
+gratuitous href
+<!-- Reviewable:end -->`,
+			"Some message",
+		},
+		{
+			`Merge pull request #1234 from user/master
+
+Automatic merge from submit-queue (batch tested with PRs 1, 2, 1234, 57)
+
+[Part 2] Adding s390x cross-compilation support for gcr.io images in this repo
+
+<!--  Thanks for sending a pull request!  Here are some tips for you:
+1. If this is your first time, read our contributor guidelines https://github.com/kubernetes/kubernetes/blob/master/CONTRIBUTING.md and developer guide https://github.com/kubernetes/kubernetes/blob/master/docs/devel/development.md
+2. If you want *faster* PR reviews, read how: https://github.com/kubernetes/kubernetes/blob/master/docs/devel/faster_reviews.md
+3. Follow the instructions for writing a release note: https://github.com/kubernetes/kubernetes/blob/master/docs/devel/pull-requests.md#release-notes
+-->
+
+**What this PR does / why we need it**: This PR enables s390x support.
+
+**Which issue this PR fixes #34328
+
+**Special notes for your reviewer**:  I am enabling cross compilation for s390x.
+
+**Release note**:
+<!--  Steps to write your release note:
+1. Use the release-note-* labels to set the release note state (if you have access)
+2. Enter your extended release note in the below block; leaving it blank means using the PR title as the release note. If no release note is required, just write` +
+				" `NONE`.\n-->\n```\nAllows cross compilation of Kubernetes on x86 host for s390x also enables s390x support to kube-dns , pause, addon-manager, etcd, hyperkube, kube-discovery etc\n```\n",
+			`Merge pull request #1234 from user/master
+
+Automatic merge from submit-queue (batch tested with PRs 1, 2, 1234, 57)
+
+[Part 2] Adding s390x cross-compilation support for gcr.io images in this repo
+
+
+**What this PR does / why we need it**: This PR enables s390x support.
+
+**Which issue this PR fixes #34328
+
+**Special notes for your reviewer**:  I am enabling cross compilation for s390x.
+
+**Release note**:
+` + "```\nAllows cross compilation of Kubernetes on x86 host for s390x also enables s390x support to kube-dns , pause, addon-manager, etcd, hyperkube, kube-discovery etc\n```",
+		},
+	}
+	for testNum, test := range tests {
+		body := cleanIssueBody(test.body)
+		if body != test.expected {
+			t.Errorf("%d: cleanIssueBody(%#v) == %#v != %#v",
+				testNum, test.body, body, test.expected)
+		}
 	}
 }

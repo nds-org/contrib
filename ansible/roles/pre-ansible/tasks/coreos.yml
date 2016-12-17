@@ -28,7 +28,7 @@
   raw: chmod +x {{ bootstrap_script_dir }}/python
 
 - name: CoreOS | Check python executable linkage and mark .bootstrapped
-  raw: "{{ bootstrap_script_dir }}/python --version"
+  raw: "{{ bootstrap_script_dir }}/python --version && touch /opt/bin/python/.bootstrapped"
 
 - name: CoreOS | Add opt-path.sh to profile.d for adding python exec PATH
   raw: >

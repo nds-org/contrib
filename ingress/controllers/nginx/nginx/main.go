@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,22 +17,22 @@ limitations under the License.
 package nginx
 
 import (
-	"fmt"
 	"os"
 	"strings"
 	"sync"
-	"text/template"
 
 	"github.com/golang/glog"
 
-	"github.com/fatih/structs"
-	"github.com/ghodss/yaml"
-
-	"k8s.io/kubernetes/pkg/api"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
 	"k8s.io/kubernetes/pkg/util/flowcontrol"
 
 	"k8s.io/contrib/ingress/controllers/nginx/nginx/config"
+	"k8s.io/contrib/ingress/controllers/nginx/nginx/ingress"
+	ngx_template "k8s.io/contrib/ingress/controllers/nginx/nginx/template"
+)
+
+var (
+	tmplPath = "/etc/nginx/template/nginx.tmpl"
 )
 
 // Manager ...
@@ -48,9 +48,22 @@ type Manager struct {
 	reloadRateLimiter flowcontrol.RateLimiter
 
 	// template loaded ready to be used to generate the nginx configuration file
-	template *template.Template
+	template *ngx_template.Template
 
 	reloadLock *sync.Mutex
+}
+
+// NewDefaultServer return an UpstreamServer to be use as default server that returns 503.
+func NewDefaultServer() ingress.UpstreamServer {
+	return ingress.UpstreamServer{Address: "127.0.0.1", Port: "8181"}
+}
+
+// NewUpstream creates an upstream without servers.
+func NewUpstream(name string) *ingress.Upstream {
+	return &ingress.Upstream{
+		Name:     name,
+		Backends: []ingress.UpstreamServer{},
+	}
 }
 
 // NewManager ...
@@ -58,17 +71,39 @@ func NewManager(kubeClient *client.Client) *Manager {
 	ngx := &Manager{
 		ConfigFile:        "/etc/nginx/nginx.conf",
 		defCfg:            config.NewDefault(),
-		defResolver:       strings.Join(getDNSServers(), " "),
 		reloadLock:        &sync.Mutex{},
 		reloadRateLimiter: flowcontrol.NewTokenBucketRateLimiter(0.1, 1),
 	}
+
+	res, err := getDNSServers()
+	if err != nil {
+		glog.Warningf("error reading nameservers: %v", err)
+	}
+	ngx.defResolver = strings.Join(res, " ")
 
 	ngx.createCertsDir(config.SSLDirectory)
 
 	ngx.sslDHParam = ngx.SearchDHParamFile(config.SSLDirectory)
 
-	ngx.loadTemplate()
+	var onChange func()
+	onChange = func() {
+		template, err := ngx_template.NewTemplate(tmplPath, onChange)
+		if err != nil {
+			glog.Warningf("invalid NGINX template: %v", err)
+			return
+		}
 
+		ngx.template.Close()
+		ngx.template = template
+		glog.Info("new NGINX template loaded")
+	}
+
+	template, err := ngx_template.NewTemplate(tmplPath, onChange)
+	if err != nil {
+		glog.Fatalf("invalid NGINX template: %v", err)
+	}
+
+	ngx.template = template
 	return ngx
 }
 
@@ -80,26 +115,4 @@ func (nginx *Manager) createCertsDir(base string) {
 		}
 		glog.Fatalf("Couldn't create directory %v: %v", base, err)
 	}
-}
-
-// ConfigMapAsString returns a ConfigMap with the default NGINX
-// configuration to be used a guide to provide a custom configuration
-func ConfigMapAsString() string {
-	cfg := &api.ConfigMap{}
-	cfg.Name = "custom-name"
-	cfg.Namespace = "a-valid-namespace"
-	cfg.Data = make(map[string]string)
-
-	data := structs.Map(config.NewDefault())
-	for k, v := range data {
-		cfg.Data[k] = fmt.Sprintf("%v", v)
-	}
-
-	out, err := yaml.Marshal(cfg)
-	if err != nil {
-		glog.Warningf("Unexpected error creating default configuration: %v", err)
-		return ""
-	}
-
-	return string(out)
 }

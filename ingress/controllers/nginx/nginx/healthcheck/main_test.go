@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -84,7 +84,7 @@ func TestAnnotations(t *testing.T) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 	if mf != 1 {
-		t.Errorf("Expected 1 but returned %s", mf)
+		t.Errorf("Expected 1 but returned %v", mf)
 	}
 
 	ft, err := ingAnnotations(ing.GetAnnotations()).failTimeout()
@@ -92,7 +92,7 @@ func TestAnnotations(t *testing.T) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 	if ft != 1 {
-		t.Errorf("Expected 1 but returned %s", ft)
+		t.Errorf("Expected 1 but returned %v", ft)
 	}
 }
 

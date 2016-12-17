@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -78,6 +78,9 @@ type Configuration struct {
 	// Sets the maximum allowed size of the client request body
 	BodySize string `structs:"body-size,omitempty"`
 
+	// HealthzURL defines the URL should be used in probes
+	HealthzURL string
+
 	// EnableDynamicTLSRecords enables dynamic TLS record sizes
 	// https://blog.cloudflare.com/optimizing-tls-over-tcp-to-reduce-latency
 	// By default this is enabled
@@ -138,6 +141,11 @@ type Configuration struct {
 	// http://nginx.org/en/docs/ngx_core_module.html#worker_connections
 	MaxWorkerConnections int `structs:"max-worker-connections,omitempty"`
 
+	// Sets the bucket size for the map variables hash tables.
+	// Default value depends on the processor’s cache line size.
+	// http://nginx.org/en/docs/http/ngx_http_map_module.html#map_hash_bucket_size
+	MapHashBucketSize int `structs:"map-hash-bucket-size,omitempty"`
+
 	// Defines a timeout for establishing a connection with a proxied server.
 	// It should be noted that this timeout cannot usually exceed 75 seconds.
 	// http://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_connect_timeout
@@ -157,6 +165,11 @@ type Configuration struct {
 	// http://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_send_timeout
 	ProxySendTimeout int `structs:"proxy-send-timeout,omitempty"`
 
+	// Sets the size of the buffer used for reading the first part of the response received from the
+	// proxied server. This part usually contains a small response header.
+	// http://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffer_size)
+	ProxyBufferSize string `structs:"proxy-buffer-size,omitempty"`
+
 	// Configures name servers used to resolve names of upstream servers into addresses
 	// http://nginx.org/en/docs/http/ngx_http_core_module.html#resolver
 	Resolver string `structs:"resolver,omitempty"`
@@ -167,7 +180,7 @@ type Configuration struct {
 	// http://nginx.org/en/docs/http/ngx_http_core_module.html#server_names_hash_max_size
 	ServerNameHashMaxSize int `structs:"server-name-hash-max-size,omitempty"`
 
-	// Size of the bucker for the server names hash tables
+	// Size of the bucket for the server names hash tables
 	// http://nginx.org/en/docs/hash.html
 	// http://nginx.org/en/docs/http/ngx_http_core_module.html#server_names_hash_bucket_size
 	ServerNameHashBucketSize int `structs:"server-name-hash-bucket-size,omitempty"`
@@ -271,10 +284,12 @@ func NewDefault() Configuration {
 		GzipTypes:                gzipTypes,
 		KeepAlive:                75,
 		MaxWorkerConnections:     16384,
+		MapHashBucketSize:        64,
 		ProxyConnectTimeout:      5,
 		ProxyRealIPCIDR:          defIPCIDR,
 		ProxyReadTimeout:         60,
 		ProxySendTimeout:         60,
+		ProxyBufferSize:          "4k",
 		ServerNameHashMaxSize:    512,
 		ServerNameHashBucketSize: 64,
 		SSLRedirect:              true,

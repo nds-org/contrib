@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"k8s.io/contrib/cluster-autoscaler/cloudprovider"
-	kube_api "k8s.io/kubernetes/pkg/api"
+	apiv1 "k8s.io/kubernetes/pkg/api/v1"
 )
 
 // GceCloudProvider implements CloudProvider interface.
@@ -72,7 +72,7 @@ func (gce *GceCloudProvider) NodeGroups() []cloudprovider.NodeGroup {
 }
 
 // NodeGroupForNode returns the node group for the given node.
-func (gce *GceCloudProvider) NodeGroupForNode(node *kube_api.Node) (cloudprovider.NodeGroup, error) {
+func (gce *GceCloudProvider) NodeGroupForNode(node *apiv1.Node) (cloudprovider.NodeGroup, error) {
 	ref, err := GceRefFromProviderId(node.Spec.ProviderID)
 	if err != nil {
 		return nil, err
@@ -141,13 +141,13 @@ func (mig *Mig) IncreaseSize(delta int) error {
 		return err
 	}
 	if int(size)+delta > mig.MaxSize() {
-		return fmt.Errorf("size increase to large - desired:%d max:%d", int(size)+delta, mig.MaxSize())
+		return fmt.Errorf("size increase too large - desired:%d max:%d", int(size)+delta, mig.MaxSize())
 	}
 	return mig.gceManager.SetMigSize(mig, size+int64(delta))
 }
 
-// Belongs retruns true if the given node belongs to the NodeGroup.
-func (mig *Mig) Belongs(node *kube_api.Node) (bool, error) {
+// Belongs returns true if the given node belongs to the NodeGroup.
+func (mig *Mig) Belongs(node *apiv1.Node) (bool, error) {
 	ref, err := GceRefFromProviderId(node.Spec.ProviderID)
 	if err != nil {
 		return false, err
@@ -166,7 +166,7 @@ func (mig *Mig) Belongs(node *kube_api.Node) (bool, error) {
 }
 
 // DeleteNodes deletes the nodes from the group.
-func (mig *Mig) DeleteNodes(nodes []*kube_api.Node) error {
+func (mig *Mig) DeleteNodes(nodes []*apiv1.Node) error {
 	size, err := mig.gceManager.GetMigSize(mig)
 	if err != nil {
 		return err
@@ -181,7 +181,7 @@ func (mig *Mig) DeleteNodes(nodes []*kube_api.Node) error {
 		if err != nil {
 			return err
 		}
-		if belongs {
+		if !belongs {
 			return fmt.Errorf("%s belong to a different mig than %s", node.Name, mig.Id())
 		}
 		gceref, err := GceRefFromProviderId(node.Spec.ProviderID)

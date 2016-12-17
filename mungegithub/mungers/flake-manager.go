@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -53,14 +53,13 @@ type issueFinder interface {
 
 // FlakeManager files issues for flaky tests.
 type FlakeManager struct {
+	OwnerPath            string
 	finder               issueFinder
 	sq                   *SubmitQueue
 	config               *github.Config
 	googleGCSBucketUtils *utils.Utils
-
-	syncer    *sync.IssueSyncer
-	ownerPath string
-	features  *features.Features
+	syncer               *sync.IssueSyncer
+	features             *features.Features
 }
 
 func init() {
@@ -75,8 +74,6 @@ func (p *FlakeManager) RequiredFeatures() []string { return []string{features.GC
 
 // Initialize will initialize the munger
 func (p *FlakeManager) Initialize(config *github.Config, features *features.Features) error {
-	glog.Infof("test-owners-csv: %#v\n", p.ownerPath)
-
 	// TODO: don't get the mungers from the global list, they should be passed in...
 	for _, m := range GetAllMungers() {
 		if m.Name() == "issue-cacher" {
@@ -100,8 +97,8 @@ func (p *FlakeManager) Initialize(config *github.Config, features *features.Feat
 
 	var owner sync.OwnerMapper
 	var err error
-	if p.ownerPath != "" {
-		owner, err = testowner.NewReloadingOwnerList(p.ownerPath)
+	if p.OwnerPath != "" {
+		owner, err = testowner.NewReloadingOwnerList(p.OwnerPath)
 		if err != nil {
 			return err
 		}
@@ -128,7 +125,7 @@ func (p *FlakeManager) EachLoop() error {
 
 // AddFlags will add any request flags to the cobra `cmd`
 func (p *FlakeManager) AddFlags(cmd *cobra.Command, config *github.Config) {
-	cmd.Flags().StringVar(&p.ownerPath, "test-owners-csv", "", "file containing a CSV-exported test-owners spreadsheet")
+	cmd.Flags().StringVar(&p.OwnerPath, "test-owners-csv", "", "file containing a CSV-exported test-owners spreadsheet")
 }
 
 // Munge is unused by this munger.
@@ -345,15 +342,18 @@ func autoPrioritize(comments []*libgithub.IssueComment, issueCreatedAt *time.Tim
 			weekCount += 1
 		}
 	}
-
-	// P2: By default
-	// P1: Flake happens more than once in last month.
-	// P0: Flake happens more than twice in last week.
-	p := sync.PriorityP2
-	if weekCount >= 3 {
+	// Priorities are defined if the flake happens:
+	// P0: 50 or more times a week.
+	// P1: 10 - 50 times in a week
+	// P2: 3 or more times in a week
+	// p3: happens once or twice in a week (default value)
+	p := sync.PriorityP3
+	if weekCount >= 50 {
 		p = sync.PriorityP0
-	} else if monthCount >= 2 {
+	} else if weekCount >= 10 {
 		p = sync.PriorityP1
+	} else if weekCount >= 3 {
+		p = sync.PriorityP2
 	}
 	return p
 }

@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -160,11 +160,8 @@ func (e *RealE2ETester) getGCSPostsubmitResult(j cache.Job, n cache.Number) (*ca
 	}
 	if len(thisFailures) == 0 {
 		r.Status = cache.ResultFailed
-		// We add a "flake" just to make sure this appears in the flake
-		// cache as something that needs to be synced.
-		r.Flakes = map[cache.Test]string{
-			cache.RunBrokenTestName: "Unable to get data-- please look at the logs",
-		}
+		// Don't return any flake information, to reduce flake noise -- getting an issue opened
+		// for every failed run without logs is not useful.
 		return r, nil
 	}
 

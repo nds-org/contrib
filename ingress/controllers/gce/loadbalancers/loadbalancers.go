@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -49,6 +49,9 @@ const (
 
 	// A single target proxy/urlmap/forwarding rule is created per loadbalancer.
 	// Tagged with the namespace/name of the Ingress.
+	// TODO: Move the namer to its own package out of utils and move the prefix
+	// with it. Currently the construction of the loadbalancer resources names
+	// are split between the namer and the loadbalancers package.
 	targetProxyPrefix         = "k8s-tp"
 	targetHTTPSProxyPrefix    = "k8s-tps"
 	sslCertPrefix             = "k8s-ssl"
@@ -868,4 +871,14 @@ func GetLBAnnotations(l7 *L7, existing map[string]string, backendPool backends.B
 	// TODO: We really want to know *when* a backend flipped states.
 	existing[fmt.Sprintf("%v/backends", utils.K8sAnnotationPrefix)] = jsonBackendState
 	return existing
+}
+
+// GCEResourceName retrieves the name of the gce resource created for this
+// Ingress, of the given resource type, by inspecting the map of ingress
+// annotations.
+func GCEResourceName(ingAnnotations map[string]string, resourceName string) string {
+	// Even though this function is trivial, it exists to keep the annotation
+	// parsing logic in a single location.
+	resourceName, _ = ingAnnotations[fmt.Sprintf("%v/%v", utils.K8sAnnotationPrefix, resourceName)]
+	return resourceName
 }

@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,8 +29,6 @@ import (
 	"github.com/golang/glog"
 	"github.com/spf13/pflag"
 
-	"k8s.io/contrib/ingress/controllers/nginx/nginx"
-
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/client/unversioned"
 	"k8s.io/kubernetes/pkg/healthz"
@@ -38,12 +36,12 @@ import (
 )
 
 const (
-	healthPort = 10249
+	healthPort = 10254
 )
 
 var (
 	// value overwritten during build. This can be used to resolve issues.
-	version = "0.8.2"
+	version = "0.8.3"
 	gitRepo = "https://github.com/kubernetes/contrib"
 
 	flags = pflag.NewFlagSet("", pflag.ExitOnError)
@@ -55,10 +53,6 @@ var (
 
 	nxgConfigMap = flags.String("nginx-configmap", "",
 		`Name of the ConfigMap that containes the custom nginx configuration to use`)
-
-	inCluster = flags.Bool("running-in-cluster", true,
-		`Optional, if this controller is running in a kubernetes cluster, use the
-		 pod secrets for creating a Kubernetes client.`)
 
 	tcpConfigMapName = flags.String("tcp-services-configmap", "",
 		`Name of the ConfigMap that containes the definition of the TCP services to expose.
@@ -81,52 +75,42 @@ var (
 
 	healthzPort = flags.Int("healthz-port", healthPort, "port for healthz endpoint.")
 
-	buildCfg = flags.Bool("dump-nginx-configuration", false, `Returns a ConfigMap with the default nginx conguration.
-		This can be used as a guide to create a custom configuration.`)
-
 	profiling = flags.Bool("profiling", true, `Enable profiling via web interface host:port/debug/pprof/`)
 
 	defSSLCertificate = flags.String("default-ssl-certificate", "", `Name of the secret that contains a SSL 
 		certificate to be used as default for a HTTPS catch-all server`)
+
+	defHealthzURL = flags.String("health-check-path", "/ingress-controller-healthz", `Defines the URL to
+		be used as health check inside in the default server in NGINX.`)
 )
 
 func main() {
-	var kubeClient *unversioned.Client
 	flags.AddGoFlagSet(flag.CommandLine)
 	flags.Parse(os.Args)
 	clientConfig := kubectl_util.DefaultClientConfig(flags)
 
 	glog.Infof("Using build: %v - %v", gitRepo, version)
 
-	if *buildCfg {
-		fmt.Printf("Example of ConfigMap to customize NGINX configuration:\n%v", nginx.ConfigMapAsString())
-		os.Exit(0)
-	}
-
 	if *defaultSvc == "" {
 		glog.Fatalf("Please specify --default-backend-service")
 	}
 
-	var err error
-	if *inCluster {
-		kubeClient, err = unversioned.NewInCluster()
-	} else {
-		config, connErr := clientConfig.ClientConfig()
-		if connErr != nil {
-			glog.Fatalf("error connecting to the client: %v", err)
+	kubeClient, err := unversioned.NewInCluster()
+	if err != nil {
+		config, err := clientConfig.ClientConfig()
+		if err != nil {
+			glog.Fatalf("error configuring the client: %v", err)
 		}
 		kubeClient, err = unversioned.New(config)
-	}
-	if err != nil {
-		glog.Fatalf("failed to create client: %v", err)
+		if err != nil {
+			glog.Fatalf("failed to create client: %v", err)
+		}
 	}
 
-	runtimePodInfo := &podInfo{NodeIP: "127.0.0.1"}
-	if *inCluster {
-		runtimePodInfo, err = getPodDetails(kubeClient)
-		if err != nil {
-			glog.Fatalf("unexpected error getting runtime information: %v", err)
-		}
+	runtimePodInfo, err := getPodDetails(kubeClient)
+	if err != nil {
+		runtimePodInfo = &podInfo{NodeIP: "127.0.0.1"}
+		glog.Warningf("unexpected error getting runtime information: %v", err)
 	}
 	if err := isValidService(kubeClient, *defaultSvc); err != nil {
 		glog.Fatalf("no service with name %v found: %v", *defaultSvc, err)
@@ -134,7 +118,7 @@ func main() {
 	glog.Infof("Validated %v as the default backend", *defaultSvc)
 
 	if *nxgConfigMap != "" {
-		_, _, err := parseNsName(*nxgConfigMap)
+		_, _, err = parseNsName(*nxgConfigMap)
 		if err != nil {
 			glog.Fatalf("configmap error: %v", err)
 		}
@@ -142,7 +126,7 @@ func main() {
 
 	lbc, err := newLoadBalancerController(kubeClient, *resyncPeriod,
 		*defaultSvc, *watchNamespace, *nxgConfigMap, *tcpConfigMapName,
-		*udpConfigMapName, *defSSLCertificate, runtimePodInfo)
+		*udpConfigMapName, *defSSLCertificate, *defHealthzURL, runtimePodInfo)
 	if err != nil {
 		glog.Fatalf("%v", err)
 	}
@@ -169,12 +153,12 @@ func registerHandlers(lbc *loadBalancerController) {
 	mux := http.NewServeMux()
 	healthz.InstallHandler(mux, lbc.nginx)
 
-	http.HandleFunc("/build", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/build", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "build: %v - %v", gitRepo, version)
 	})
 
-	http.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
 		lbc.Stop()
 	})
 

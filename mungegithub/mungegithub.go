@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,6 +30,8 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/spf13/cobra"
+	"k8s.io/contrib/mungegithub/mungers/fsm"
+	"k8s.io/contrib/mungegithub/mungers/mungerutil"
 )
 
 var (
@@ -38,16 +40,18 @@ var (
 
 type mungeConfig struct {
 	github_util.Config
-	MinIssueNumber   int
-	PRMungersList    []string
-	IssueReportsList []string
-	Once             bool
-	Period           time.Duration
+	MinIssueNumber      int
+	PRMungersList       []string
+	IssueReportsList    []string
+	Once                bool
+	Period              time.Duration
+	StateMachineEnabled bool
 	features.Features
 }
 
 func addMungeFlags(config *mungeConfig, cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&config.Once, "once", false, "If true, run one loop and exit")
+	cmd.Flags().BoolVar(&config.StateMachineEnabled, "state-machine-enabled", false, "If true, run the state machine after all mungers are run.")
 	cmd.Flags().StringSliceVar(&config.PRMungersList, "pr-mungers", []string{}, "A list of pull request mungers to run")
 	cmd.Flags().StringSliceVar(&config.IssueReportsList, "issue-reports", []string{}, "A list of issue reports to run. If set, will run the reports and exit.")
 	cmd.Flags().DurationVar(&config.Period, "period", 10*time.Minute, "The period for running mungers")
@@ -65,6 +69,13 @@ func doMungers(config *mungeConfig) error {
 		if err := config.ForEachIssueDo(mungers.MungeIssue); err != nil {
 			glog.Errorf("Error munging PRs: %v", err)
 		}
+
+		if config.StateMachineEnabled {
+			if err := config.ForEachIssueDo(fsm.ComputeState); err != nil {
+				glog.Errorf("Error computing state: %v", err)
+			}
+		}
+
 		config.ResetAPICount()
 		if config.Once {
 			break
@@ -86,11 +97,7 @@ func main() {
 		Use:   filepath.Base(os.Args[0]),
 		Short: "A program to add labels, check tests, and generally mess with outstanding PRs",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			glog.Infof("once: %#v\n", config.Once)
-			glog.Infof("pr-mungers: %#v\n", config.PRMungersList)
-			glog.Infof("issue-reports: %#v\n", config.IssueReportsList)
-			glog.Infof("period: %#v\n", config.Period)
-
+			glog.Info(mungerutil.PrettyString(config))
 			if err := config.PreExecute(); err != nil {
 				return err
 			}

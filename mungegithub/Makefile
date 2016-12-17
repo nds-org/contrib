@@ -12,15 +12,18 @@ CONTAINER := $(REPO)/$(APP):$(TAG)
 
 KUBECONFIG ?= $(HOME)/.kube/config
 
+# Change it to a /tmp directory when run locally, otherwise your workspace might get overwritten.
 KUBEDIR ?= $(GOPATH)/src/k8s.io/kubernetes
 CACHEDIR ?= /tmp/mungegithub-cache
 WWW ?= $(PWD)/$(APP)/www
 TARGET ?= kubernetes
 
 ifeq ($(APP),submit-queue)
-MUNGERS ?= "blunderbuss,lgtm-after-commit,cherrypick-auto-approve,label-unapproved-picks,needs-rebase,ok-to-test,rebuild-request,path-label,size,stale-pending-ci,stale-green-ci,block-path,release-note-label,comment-deleter,submit-queue,issue-cacher,flake-manager,old-test-getter"
+MUNGERS ?= "blunderbuss,lgtm-after-commit,cherrypick-auto-approve,label-unapproved-picks,needs-rebase,path-label,size,stale-pending-ci,stale-green-ci,block-path,release-note-label,comment-deleter,submit-queue,issue-cacher,flake-manager,old-test-getter"
 else ifeq ($(APP),cherrypick)
 MUNGERS ?= "cherrypick-must-have-milestone,cherrypick-clear-after-merge,cherrypick-queue"
+else ifeq ($(APP),publisher)
+MUNGERS ?= "publisher"
 endif
 
 
@@ -31,14 +34,15 @@ token64=$(shell base64 $(TOKEN))
 READONLY ?= true
 
 # just build the binary
-mungegithub:
+mungegithub build:
 	GOBIN=$(PWD) CGO_ENABLED=0 GOOS=linux go install -installsuffix cgo -ldflags '-w'
 
 test: mungegithub
-	CGO_ENABLED=0 GOOS=linux go test ./...
+	# in case of error ignore all lines of 'getsockopt: connection refused' these are background go threads that don't matter
+	CGO_ENABLED=0 GOOS=linux go test $(shell go list ./... | grep -v 'vendor/') | grep -v 'getsockopt: connection refused'
 
 # build the container with the binary
-container: test
+container: mungegithub
 	docker build -t $(CONTAINER) -f Dockerfile-$(APP) .
 
 # push the container

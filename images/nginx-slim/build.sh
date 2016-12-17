@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Copyright 2015 The Kubernetes Authors All rights reserved.
+# Copyright 2015 The Kubernetes Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,18 +17,17 @@
 
 set -e
 
-export NGINX_VERSION=1.11.1
+export NGINX_VERSION=1.11.6
 export NDK_VERSION=0.3.0
-export VTS_VERSION=0.1.9
-export SETMISC_VERSION=0.30
-export LUA_VERSION=0.10.5
-export STICKY_SESSIONS_VERSION=c78b7dd79d0d
+export VTS_VERSION=0.1.11
+export SETMISC_VERSION=0.31
+export LUA_VERSION=0.10.7
+export STICKY_SESSIONS_VERSION=08a395c66e42                               
 export LUA_CJSON_VERSION=2.1.0.4
 export LUA_RESTY_HTTP_VERSION=0.07
-export LUA_UPSTREAM_VERSION=0.05
-export MORE_HEADERS_VERSION=0.30
-export NAXSI_VERSION=0.55rc1
-export NGINX_DIGEST_AUTH=f85f5d6fdcc06002ff879f5cbce930999c287011
+export LUA_UPSTREAM_VERSION=0.06
+export MORE_HEADERS_VERSION=0.32
+export NGINX_DIGEST_AUTH=7955af9c77598c697ac292811914ce1e2b3b824c
 export NGINX_SUBSTITUTIONS=bc58cb11844bc42735bbaef7085ea86ace46d05b
 
 export BUILD_PATH=/tmp/build
@@ -70,19 +69,19 @@ apt-get update && apt-get install --no-install-recommends -y \
   linux-headers-generic || exit 1
 
 # download, verify and extract the source files
-get_src 5d8dd0197e3ffeb427729c045382182fb28db8e045c635221b2e0e6722821ad0 \
+get_src 3153abbb518e2d9c032e1b127da3dc0028ad36cd4679e5f3be0b8afa33bc85bd \
         "http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz"
 
 get_src 88e05a99a8a7419066f5ae75966fb1efc409bad4522d14986da074554ae61619 \
         "https://github.com/simpl/ngx_devel_kit/archive/v$NDK_VERSION.tar.gz"
 
-get_src 59920dd3f92c2be32627121605751b52eae32b5884be09f2e4c53fb2fae8aabc \
+get_src 97946a68937b50ab8637e1a90a13198fe376d801dc3e7447052e43c28e9ee7de \
         "https://github.com/openresty/set-misc-nginx-module/archive/v$SETMISC_VERSION.tar.gz"
 
-get_src ddd297a5f894d966cae19f112c79f99ec9fa13612c3d324c19533247c4953980 \
+get_src 31db853251a631a6b6a0b96b10806c9c32eda3c3d08fe46a38ff944b22dba636 \
         "https://github.com/vozlt/nginx-module-vts/archive/v$VTS_VERSION.tar.gz"
 
-get_src 4f0292c37ab3d7cb980c994825040be1bda2c769cbd800e79c43eb37458347d4 \
+get_src c21c8937dcdd6fc2b6a955f929e3f4d1388610f47180e60126e6dcab06786f77 \
         "https://github.com/openresty/lua-nginx-module/archive/v$LUA_VERSION.tar.gz"
 
 get_src 5417991b6db4d46383da2d18f2fd46b93fafcebfe87ba87f7cfeac4c9bcb0224 \
@@ -91,19 +90,16 @@ get_src 5417991b6db4d46383da2d18f2fd46b93fafcebfe87ba87f7cfeac4c9bcb0224 \
 get_src 1c6aa06c9955397c94e9c3e0c0fba4e2704e85bee77b4512fb54ae7c25d58d86 \
         "https://github.com/pintsized/lua-resty-http/archive/v$LUA_RESTY_HTTP_VERSION.tar.gz"
 
-get_src 2aad309a9313c21c7c06ee4e71a39c99d4d829e31c8b3e7d76f8c964ea8047f5 \
+get_src c6d9dab8ea1fc997031007e2e8f47cced01417e203cd88d53a9fe9f6ae138720 \
         "https://github.com/openresty/headers-more-nginx-module/archive/v$MORE_HEADERS_VERSION.tar.gz"
 
-get_src 0fdfb17083598e674680d8babe944f48a9ccd2af9f982eda030c446c93cfe72b \
+get_src 55475fe4f9e4b5220761269ccf0069ebb1ded61d7e7888f9c785c651cff3d141 \
         "https://github.com/openresty/lua-upstream-nginx-module/archive/v$LUA_UPSTREAM_VERSION.tar.gz"
 
-get_src 6353441ee53dca173689b63a78f1c9ac5408f3ed066ddaa3f43fd2795bd43cdd \
-        "https://github.com/nbs-system/naxsi/archive/$NAXSI_VERSION.tar.gz"
-
-get_src 8b1277e41407e893b5488bd953612f4e7bf9e241f9494faf71d93f1b1d5beefa \
+get_src 53e440737ed1aff1f09fae150219a45f16add0c8d6e84546cb7d80f73ebffd90 \
         "https://bitbucket.org/nginx-goodies/nginx-sticky-module-ng/get/$STICKY_SESSIONS_VERSION.tar.gz"
 
-get_src 618de9d87cbb4e6ad21cc4a1a178bbfdabddba9ad07ddee4c1190d23c12887ee \
+get_src 9b1d0075df787338bb607f14925886249bda60b6b3156713923d5d59e99a708b \
         "https://github.com/atomx/nginx-http-auth-digest/archive/$NGINX_DIGEST_AUTH.tar.gz"
 
 get_src 8eabbcd5950fdcc718bb0ef9165206c2ed60f67cd9da553d7bc3e6fe4e338461 \
@@ -111,19 +107,13 @@ get_src 8eabbcd5950fdcc718bb0ef9165206c2ed60f67cd9da553d7bc3e6fe4e338461 \
 
 
 #https://blog.cloudflare.com/optimizing-tls-over-tcp-to-reduce-latency/
-curl -sSL -o nginx__dynamic_tls_records.patch https://raw.githubusercontent.com/cloudflare/sslconfig/master/patches/nginx__dynamic_tls_records.patch
-
-# Add SPDY support back to Nginx with HTTP/2
-# https://github.com/cloudflare/sslconfig
-curl -sSL -o nginx_1_9_15_http2_spdy.patch https://raw.githubusercontent.com/felixbuenemann/sslconfig/7c23d2791857f0b07e3008ba745bcf48d8d6b170/patches/nginx_1_9_15_http2_spdy.patch
+curl -sSL -o nginx__dynamic_tls_records.patch https://raw.githubusercontent.com/cloudflare/sslconfig/master/patches/nginx__1.11.5_dynamic_tls_records.patch
 
 # build nginx
 cd "$BUILD_PATH/nginx-$NGINX_VERSION"
 
 echo "Applying tls nginx patches..."
 patch -p1 < $BUILD_PATH/nginx__dynamic_tls_records.patch
-patch -p1 < $BUILD_PATH/nginx_1_9_15_http2_spdy.patch 
-
 
 ./configure \
   --prefix=/usr/share/nginx \
@@ -139,7 +129,6 @@ patch -p1 < $BUILD_PATH/nginx_1_9_15_http2_spdy.patch
   --http-uwsgi-temp-path=/var/lib/nginx/uwsgi \
   --with-debug \
   --with-pcre-jit \
-  --with-ipv6 \
   --with-http_ssl_module \
   --with-http_stub_status_module \
   --with-http_realip_module \
@@ -150,9 +139,9 @@ patch -p1 < $BUILD_PATH/nginx_1_9_15_http2_spdy.patch
   --with-http_gzip_static_module \
   --with-http_sub_module \
   --with-http_v2_module \
-  --with-http_spdy_module \
   --with-stream \
   --with-stream_ssl_module \
+  --with-stream_ssl_preread_module \
   --with-threads \
   --with-file-aio \
   --without-mail_pop3_module \

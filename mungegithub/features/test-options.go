@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ package features
 import (
 	"k8s.io/contrib/mungegithub/github"
 
-	"github.com/golang/glog"
 	"github.com/spf13/cobra"
 )
 
@@ -45,7 +44,6 @@ func (t *TestOptions) Name() string {
 
 // Initialize will initialize the feature.
 func (t *TestOptions) Initialize(config *github.Config) error {
-	glog.Infof("required-retest-contexts: %#v\n", t.RequiredRetestContexts)
 	return nil
 }
 

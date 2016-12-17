@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors All rights reserved.
+Copyright 2015 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,7 +28,6 @@ import (
 	"github.com/golang/glog"
 	"github.com/mitchellh/mapstructure"
 	"k8s.io/kubernetes/pkg/api"
-	"k8s.io/kubernetes/pkg/util/sysctl"
 
 	"k8s.io/contrib/ingress/controllers/nginx/nginx/config"
 )
@@ -39,15 +38,14 @@ const (
 )
 
 // getDNSServers returns the list of nameservers located in the file /etc/resolv.conf
-func getDNSServers() []string {
+func getDNSServers() ([]string, error) {
+	var nameservers []string
 	file, err := ioutil.ReadFile("/etc/resolv.conf")
 	if err != nil {
-		return []string{}
+		return nameservers, err
 	}
 
 	// Lines of the form "nameserver 1.2.3.4" accumulate.
-	nameservers := []string{}
-
 	lines := strings.Split(string(file), "\n")
 	for l := range lines {
 		trimmed := strings.TrimSpace(lines[l])
@@ -64,7 +62,7 @@ func getDNSServers() []string {
 	}
 
 	glog.V(3).Infof("nameservers to use: %v", nameservers)
-	return nameservers
+	return nameservers, nil
 }
 
 // getConfigKeyToStructKeyMap returns a map with the ConfigMapKey as key and the StructName as value.
@@ -144,6 +142,10 @@ func (ngx *Manager) ReadConfig(conf *api.ConfigMap) config.Configuration {
 
 	cfgDefault.CustomHTTPErrors = ngx.filterErrors(cErrors)
 	cfgDefault.SkipAccessLogURLs = cSkipUrls
+	// no custom resolver means use the system resolver
+	if cfgDefault.Resolver == "" {
+		cfgDefault.Resolver = ngx.defResolver
+	}
 	return cfgDefault
 }
 
@@ -160,7 +162,7 @@ func (ngx *Manager) filterErrors(errCodes []int) []int {
 	return fa
 }
 
-func (ngx *Manager) needsReload(data *bytes.Buffer) (bool, error) {
+func (ngx *Manager) needsReload(data []byte) (bool, error) {
 	filename := ngx.ConfigFile
 	in, err := os.Open(filename)
 	if err != nil {
@@ -173,14 +175,13 @@ func (ngx *Manager) needsReload(data *bytes.Buffer) (bool, error) {
 		return false, err
 	}
 
-	res := data.Bytes()
-	if !bytes.Equal(src, res) {
-		err = ioutil.WriteFile(filename, res, 0644)
+	if !bytes.Equal(src, data) {
+		err = ioutil.WriteFile(filename, data, 0644)
 		if err != nil {
 			return false, err
 		}
 
-		dData, err := diff(src, res)
+		dData, err := diff(src, data)
 		if err != nil {
 			glog.Errorf("error computing diff: %s", err)
 			return true, nil
@@ -220,17 +221,4 @@ func diff(b1, b2 []byte) (data []byte, err error) {
 		err = nil
 	}
 	return
-}
-
-// sysctlSomaxconn returns the value of net.core.somaxconn, i.e.
-// maximum number of connections that can be queued for acceptance
-// http://nginx.org/en/docs/http/ngx_http_core_module.html#listen
-func sysctlSomaxconn() int {
-	maxConns, err := sysctl.GetSysctl("net/core/somaxconn")
-	if err != nil || maxConns < 512 {
-		glog.Warningf("system net.core.somaxconn=%v. Using NGINX default (511)", maxConns)
-		return 511
-	}
-
-	return maxConns
 }

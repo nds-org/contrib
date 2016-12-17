@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors All rights reserved.
+Copyright 2016 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,8 +20,11 @@ import (
 	"encoding/csv"
 	"errors"
 	"io"
+	"math/rand"
 	"os"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -41,18 +44,48 @@ func normalize(name string) string {
 // OwnerList uses a map to get owners for a given test name.
 type OwnerList struct {
 	mapping map[string]string
+	rng     *rand.Rand
 }
 
-// TestOwner returns the owner for a test, or the empty string if none is found.
+// TestOwner returns the owner for a test, an owner from default if present,
+// or else the empty string if none is found.
 func (o *OwnerList) TestOwner(testName string) string {
 	name := normalize(testName)
+
+	// exact mapping
 	owner, _ := o.mapping[name]
+
+	// glob matching
+	if owner == "" {
+		keys := []string{}
+		for k := range o.mapping {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			if match, _ := filepath.Match(k, name); match {
+				owner = o.mapping[k]
+				break
+			}
+		}
+	}
+
+	// falls into default
+	if owner == "" {
+		owner, _ = o.mapping["default"]
+	}
+
+	if strings.Contains(owner, "/") {
+		ownerSet := strings.Split(owner, "/")
+		owner = ownerSet[o.rng.Intn(len(ownerSet))]
+	}
 	return owner
 }
 
 // NewOwnerList constructs an OwnerList given a mapping from test names to test owners.
 func NewOwnerList(mapping map[string]string) *OwnerList {
 	list := OwnerList{}
+	list.rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 	list.mapping = make(map[string]string)
 	for input, output := range mapping {
 		list.mapping[normalize(input)] = output
