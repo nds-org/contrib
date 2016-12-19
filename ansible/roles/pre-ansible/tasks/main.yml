@@ -23,8 +23,16 @@
     bin_dir: "/opt/bin"
   when: is_coreos
 
-- include: coreos.yml
+- name: Check if CoreOS bootstrap is needed
+  raw: test -f "{{ bootstrap_script_dir }}"/python
+  changed_when: false
+  failed_when: false
+  always_run: true
+  register: cb
   when: is_coreos
+
+- include: coreos.yml
+  when: cb.rc != 0
 
 - name: Determine if Atomic
   raw: "test -f /run/ostree-booted"
