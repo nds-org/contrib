@@ -44,6 +44,7 @@ extra-storage
 fake-e2e
 fixes-issue-reassign
 forward-services
+gate-approved
 gcm-endpoint
 gcs-bucket
 gcs-logs-dir
@@ -75,6 +76,7 @@ max-empty-bulk-delete
 max-nodes-total
 max-pr-number
 max-sync-failures
+max-grateful-termination-sec
 min-pr-number
 min-replica-count
 netrc-dir
@@ -144,6 +146,7 @@ use-cluster-credentials
 use-ip
 use-kubernetes-cluster-service
 use-real-cloud
+use-reviewers
 use-unicast
 user-whitelist
 verify-unschedulable-pods
