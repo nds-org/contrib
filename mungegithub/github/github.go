@@ -232,6 +232,7 @@ type analytics struct {
 	ListReviewComments   analytic
 	CreateComment        analytic
 	DeleteComment        analytic
+	EditComment          analytic
 	Merge                analytic
 	GetUser              analytic
 	SetMilestone         analytic
@@ -942,6 +943,23 @@ func (obj *MungeObject) RemoveLabel(label string) error {
 		return err
 	}
 	return nil
+}
+
+// ModifiedAfterLabeled returns true if the PR was updated after the last time the
+// label was applied.
+func (obj *MungeObject) ModifiedAfterLabeled(label string) (after bool, ok bool) {
+	labelTime := obj.LabelTime(label)
+	if labelTime == nil {
+		glog.Errorf("Unable to find label time for: %q on %d", label, obj.Number())
+		return false, false
+	}
+	lastModifiedTime := obj.LastModifiedTime()
+	if lastModifiedTime == nil {
+		glog.Errorf("Unable to find last modification time for %d", obj.Number())
+		return false, false
+	}
+	after = lastModifiedTime.After(*labelTime)
+	return after, true
 }
 
 // GetHeadAndBase returns the head SHA and the base ref, so that you can get
@@ -1899,7 +1917,7 @@ func (obj *MungeObject) DeleteComment(comment *github.IssueComment) error {
 		copy(temp[which:], obj.comments[which+1:])
 		obj.comments = temp
 	}
-	body := "UNKOWN"
+	body := "UNKNOWN"
 	if comment.Body != nil {
 		body = *comment.Body
 	}
@@ -1915,6 +1933,42 @@ func (obj *MungeObject) DeleteComment(comment *github.IssueComment) error {
 		glog.Errorf("Error removing comment: %v", err)
 		return err
 	}
+	return nil
+}
+
+// EditComment will change the specified comment's body.
+func (obj *MungeObject) EditComment(comment *github.IssueComment, body string) error {
+	config := obj.config
+	prNum := *obj.Issue.Number
+	config.analytics.EditComment.Call(config, nil)
+	if comment.ID == nil {
+		err := fmt.Errorf("Found a comment with nil id for Issue %d", prNum)
+		glog.Errorf("Found a comment with nil id for Issue %d", prNum)
+		return err
+	}
+	author := "UNKNOWN"
+	if comment.User != nil && comment.User.Login != nil {
+		author = *comment.User.Login
+	}
+	shortBody := body
+	if len(shortBody) > 512 {
+		shortBody = shortBody[:512]
+	}
+	glog.Infof("Editing comment %d from Issue %d. Author:%s New Body:%q", *comment.ID, prNum, author, shortBody)
+	if config.DryRun {
+		return nil
+	}
+	if len(body) > maxCommentLen {
+		glog.Info("Comment in %d was larger than %d and was truncated", prNum, maxCommentLen)
+		body = body[:maxCommentLen]
+	}
+	patch := github.IssueComment{Body: &body}
+	resp, _, err := config.client.Issues.EditComment(config.Org, config.Project, *comment.ID, &patch)
+	if err != nil {
+		glog.Errorf("Error editing comment: %v", err)
+		return err
+	}
+	comment.Body = resp.Body
 	return nil
 }
 
