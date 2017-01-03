@@ -19,18 +19,6 @@
 - include: dns.yml
   when: dns_setup
 
-- include: cluster-monitoring.yml
-  when: cluster_monitoring
-
-- include: cluster-logging.yml
-  when: cluster_logging
-
-- include: kube-ui.yml
-  when: kube_ui
-
-- include: kube-dash.yml
-  when: kube_dash
-
 - name: Get kube-addons script from Kubernetes
   copy:
     src=common/kube-addons.sh
