@@ -183,10 +183,6 @@ for k,v in yaml.load(sys.stdin).iteritems():
 ''' < "${kube_env_yaml}")
 fi
 
-
-# Create the namespace that will be used to host the cluster-level add-ons.
-start_addon /etc/kubernetes/addons/namespace.yaml 100 10 "" &
-
 # Wait for the default service account to be created in the kube-system namespace.
 token_found=""
 while [ -z "${token_found}" ]; do

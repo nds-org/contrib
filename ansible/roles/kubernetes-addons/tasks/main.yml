@@ -10,11 +10,6 @@
   vars:
     ansible_become: false
 
-- name: Make sure the system services namespace exists
-  copy:
-    src=common/namespace.yaml
-    dest="{{ kube_config_dir }}/addons/namespace.yaml"
-
 - include: dns.yml
   when: dns_setup
 
