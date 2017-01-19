@@ -20,7 +20,7 @@ branch="v1.5.2"
 github_url="https://raw.githubusercontent.com/kubernetes/kubernetes/${branch}"
 
 mkdir -p common
-for filename in namespace.yaml kube-addons.sh kube-addon-update.sh; do
+for filename in kube-addons.sh kube-addon-update.sh; do
     curl -Lfo common/${filename} "${github_url}/cluster/saltbase/salt/kube-addons/${filename}"
 done
 

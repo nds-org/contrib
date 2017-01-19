@@ -7,18 +7,6 @@
   set_fact:
     host_tmp_dir: "{{ mktemp_result.stdout }}"
 
-- name: Namespace file
-  copy: src=namespace.yml dest={{ host_tmp_dir }}
-
-- name: Namespace status
-  command: kubectl get namespace opencontrail
-  ignore_errors: yes
-  register: namespace
-
-- name: Create namespace
-  command: kubectl create -f "{{ host_tmp_dir }}/namespace.yml"
-  when: namespace.rc != 0
-
 - name: Cleanup
   file: path="{{ host_tmp_dir }}" state=absent
 
