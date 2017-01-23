@@ -43,5 +43,5 @@ spec:
       - name: es-persistent-storage
         emptyDir: {}
       securityContext:
-        seLinuxOptions:
-          type: spc_t
+        privileged: true
+

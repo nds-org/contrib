@@ -119,5 +119,5 @@ spec:
             - --poll-period=300000
             - --estimator=exponential
       securityContext:
-        seLinuxOptions:
-          type: spc_t
+        privileged: true
+
