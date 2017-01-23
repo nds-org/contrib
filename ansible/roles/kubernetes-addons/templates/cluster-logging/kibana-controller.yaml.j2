@@ -22,6 +22,8 @@ spec:
       containers:
       - name: kibana-logging
         image: gcr.io/google_containers/kibana:v4.6.1
+        securityContext:
+          privileged: true
         resources:
           # keep request = limit to keep this container in guaranteed class
           limits:
@@ -37,6 +39,4 @@ spec:
         - containerPort: 5601
           name: ui
           protocol: TCP
-      securityContext:
-        privileged: true
 

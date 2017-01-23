@@ -25,6 +25,8 @@ spec:
       containers:
       - image: gcr.io/google_containers/elasticsearch:v2.4.1
         name: elasticsearch-logging
+        securityContext:
+          privileged: true
         resources:
           # need more cpu upon initialization, therefore burstable class
           limits:
@@ -44,6 +46,5 @@ spec:
       volumes:
       - name: es-persistent-storage
         emptyDir: {}
-      securityContext:
-        privileged: true
+
 

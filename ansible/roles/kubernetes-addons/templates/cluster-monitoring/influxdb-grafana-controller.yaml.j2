@@ -24,6 +24,8 @@ spec:
           ndslabs-node-role: lma
       containers:
         - image: gcr.io/google_containers/heapster_influxdb:v0.7
+          securityContext:
+            privileged: true
           name: influxdb
           resources:
             # keep request = limit to keep this container in guaranteed class
@@ -41,6 +43,8 @@ spec:
             mountPath: /data
         - image: gcr.io/google_containers/heapster_grafana:v3.1.1
           name: grafana
+          securityContext:
+            privileged: true
           env:
           resources:
             # keep request = limit to keep this container in guaranteed class
@@ -74,6 +78,5 @@ spec:
         emptyDir: {}
       - name: grafana-persistent-storage
         emptyDir: {}
-      securityContext:
-        privileged: true
+
 

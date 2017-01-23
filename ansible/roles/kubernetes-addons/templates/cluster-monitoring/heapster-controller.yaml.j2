@@ -26,6 +26,8 @@ spec:
           ndslabs-node-role: lma
       containers:
         - image: gcr.io/google_containers/heapster:v1.2.0
+          securityContext:
+            privileged: true
           name: heapster
           livenessProbe:
             httpGet:
@@ -48,6 +50,8 @@ spec:
             - --source=kubernetes.summary_api:''
             - --sink=influxdb:http://monitoring-influxdb:8086
         - image: gcr.io/google_containers/heapster:v1.2.0
+          securityContext:
+            privileged: true
           name: eventer
           resources:
             # keep request = limit to keep this container in guaranteed class
@@ -63,6 +67,8 @@ spec:
             - --source=kubernetes:''
             - --sink=influxdb:http://monitoring-influxdb:8086
         - image: gcr.io/google_containers/addon-resizer:1.6
+          securityContext:
+            privileged: true
           name: heapster-nanny
           resources:
             limits:
@@ -92,6 +98,8 @@ spec:
             - --poll-period=300000
             - --estimator=exponential
         - image: gcr.io/google_containers/addon-resizer:1.6
+          securityContext:
+            privileged: true
           name: eventer-nanny
           resources:
             limits:
@@ -120,6 +128,5 @@ spec:
             - --container=eventer
             - --poll-period=300000
             - --estimator=exponential
-      securityContext:
-        privileged: true
+
 

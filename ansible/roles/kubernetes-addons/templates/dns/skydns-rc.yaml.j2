@@ -44,6 +44,8 @@ spec:
       containers:
       - name: kubedns
         image: gcr.io/google_containers/kubedns-amd64:1.8
+        securityContext:
+          privileged: true
         resources:
           # TODO: Set memory limits when we've profiled the container for large
           # clusters, then set request = limit to keep this container in
@@ -86,6 +88,8 @@ spec:
           protocol: TCP
       - name: dnsmasq
         image: gcr.io/google_containers/kube-dnsmasq-amd64:1.4
+        securityContext:
+          privileged: true
         livenessProbe:
           httpGet:
             path: /healthz-dnsmasq
@@ -109,6 +113,8 @@ spec:
           protocol: TCP
       - name: healthz
         image: gcr.io/google_containers/exechealthz-amd64:1.2
+        securityContext:
+          privileged: true
         resources:
           limits:
             memory: 50Mi
@@ -130,6 +136,4 @@ spec:
         - containerPort: 8080
           protocol: TCP
       dnsPolicy: Default  # Don't use cluster DNS.
-      securityContext:
-        privileged: true
 

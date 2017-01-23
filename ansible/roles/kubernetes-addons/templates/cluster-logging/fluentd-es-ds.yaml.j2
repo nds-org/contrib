@@ -15,11 +15,11 @@ spec:
         kubernetes.io/cluster-service: "true"
         version: v1.20
     spec:
-      nodeSelector:
-          ndslabs-node-role: lma
       containers:
       - name: fluentd-es
         image: gcr.io/google_containers/fluentd-elasticsearch:1.20
+        securityContext:
+          privileged: true
         command:
           - '/bin/sh'
           - '-c'
@@ -44,6 +44,5 @@ spec:
       - name: varlibdockercontainers
         hostPath:
           path: /var/lib/docker/containers
-      securityContext:
-        privileged: true
+      
 
