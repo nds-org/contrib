@@ -17,6 +17,8 @@ spec:
         kubernetes.io/cluster-service: "true"
     spec:
       hostNetwork: true
+      nodeSelector:
+          ndslabs-node-role: lma
       containers:
       - name: node-problem-detector
         image: gcr.io/google_containers/node-problem-detector:v0.1

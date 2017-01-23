@@ -22,6 +22,8 @@ spec:
         scheduler.alpha.kubernetes.io/critical-pod: ''
         scheduler.alpha.kubernetes.io/tolerations: '[{"key":"CriticalAddonsOnly", "operator":"Exists"}]'
     spec:
+      nodeSelector:
+          ndslabs-node-role: lma
       containers:
         - image: gcr.io/google_containers/heapster:v1.2.0
           name: heapster

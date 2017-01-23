@@ -20,6 +20,8 @@ spec:
         version: v1
         kubernetes.io/cluster-service: "true"
     spec:
+      nodeSelector:
+          ndslabs-node-role: lma
       containers:
       - image: gcr.io/google_containers/elasticsearch:v2.4.1
         name: elasticsearch-logging
