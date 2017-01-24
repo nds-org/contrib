@@ -102,7 +102,7 @@ node_problem_detector: true
 # Turn this varable to 'false' to disable whole DNS configuration.
 dns_setup: true
 # How many replicas in the Replication Controller
-dns_replicas: 1
+dns_replicas: 2
 
 # There are other variable in roles/kubernetes/defaults/main.yml but changing
 # them comes with a much higher risk to your cluster. So proceed over there
