@@ -25,7 +25,7 @@ spec:
         env:
         # Config the host ip and port of apiserver.
         - name: "KUBERNETES_SERVICE_HOST"
-          value: ${INSTANCE_PREFIX}-master
+          value: "{{ ansible_hostname }}"
         - name: "KUBERNETES_SERVICE_PORT"
           value: "443"
         securityContext:
