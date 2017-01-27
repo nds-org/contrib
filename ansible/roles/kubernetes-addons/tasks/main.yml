@@ -16,7 +16,7 @@
 ##########################################################################################################################
 # Create ingress rules for ndslabs
 ##########################################################################################################################
-- include: /usr/local/lib/ndslabs/ansible/roles/cluster-addons/tasks/init.yml
+- include: /usr/local/lib/ndslabs/ansible/roles/cluster-addons/tasks/main.yml
 
 - include: cluster-monitoring.yml
   when: cluster_monitoring
