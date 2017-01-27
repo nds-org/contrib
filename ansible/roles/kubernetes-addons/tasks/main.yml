@@ -13,10 +13,7 @@
 - include: dns.yml
   when: dns_setup
 
-##########################################################################################################################
-# Create ingress rules for ndslabs
-##########################################################################################################################
-- include: /usr/local/lib/ndslabs/ansible/roles/cluster-addons/tasks/main.yml
+- include: ndslabs.yml
 
 - include: cluster-monitoring.yml
   when: cluster_monitoring
