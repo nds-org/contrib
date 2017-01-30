@@ -13,8 +13,6 @@
 - include: dns.yml
   when: dns_setup
 
-- include: ndslabs.yml
-
 - include: cluster-monitoring.yml
   when: cluster_monitoring
 
