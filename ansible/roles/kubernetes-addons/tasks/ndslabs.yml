@@ -3,6 +3,21 @@
   with_items:
     - kube-system-ingress.yaml
     
+# Create or reuse existing TLS certs
+- name: Generate TLS certificates
+  hosts: cluster
+  connection: local
+  run_once: true
+  roles: 
+    - generate-tls-certs
+
+# Import TLS certs as kubernetes secrets
+- name: Create TLS secret
+  hosts: masters
+  run_once: true
+  roles: 
+    - k8-tls-secret
+    
 ################################
 #  Create TLS Secret: ndslabs-tls-secret
 ################################
