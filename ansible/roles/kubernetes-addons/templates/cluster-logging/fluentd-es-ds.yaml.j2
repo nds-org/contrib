@@ -18,6 +18,8 @@ spec:
       containers:
       - name: fluentd-es
         image: gcr.io/google_containers/fluentd-elasticsearch:1.20
+        securityContext:
+          privileged: true
         command:
           - '/bin/sh'
           - '-c'
@@ -42,6 +44,5 @@ spec:
       - name: varlibdockercontainers
         hostPath:
           path: /var/lib/docker/containers
-      securityContext:
-        seLinuxOptions:
-          type: spc_t
+      
+

@@ -123,7 +123,7 @@
         - "{{ bin_dir }}/kube-proxy"
         - "{{ bin_dir }}/kube-scheduler"
         - "{{ bin_dir }}/flanneld"
-        - /run/flannel_docker_opts.env
+        - /run/flannel/flannel_docker_opts.env
         - /run/flannel
         - /tmp/flannel-conf.json
         - /opt/flannel-0.5.5 #flannel version can change
