@@ -21,7 +21,7 @@ spec:
         kubernetes.io/cluster-service: "true"
     spec:
       nodeSelector:
-          ndslabs-node-role: lma
+          ndslabs-role-lma: "true"
       containers:
         - image: gcr.io/google_containers/heapster_influxdb:v0.7
           securityContext:
