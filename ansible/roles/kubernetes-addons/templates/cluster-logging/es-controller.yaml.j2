@@ -45,6 +45,5 @@ spec:
           mountPath: /data
       volumes:
       - name: es-persistent-storage
-        emptyDir: {}
-
-
+        hostPath:
+              path: /var/log/elasticsearch

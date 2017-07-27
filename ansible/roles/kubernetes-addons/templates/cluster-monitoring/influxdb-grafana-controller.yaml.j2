@@ -75,8 +75,8 @@ spec:
             mountPath: /var
       volumes:
       - name: influxdb-persistent-storage
-        emptyDir: {}
+        hostPath:
+            path: /var/log/influxdb
       - name: grafana-persistent-storage
-        emptyDir: {}
-
-
+        hostPath:
+            path: /var/log/grafana
